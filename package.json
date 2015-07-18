@@ -1,0 +1,20 @@
+{
+  "name": "grump.js",
+  "version": "0.0.1",
+  "description": "File builder for web era",
+  "main": "server.coffee",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Guntars Asmanis-Graham <guntars@pathgather.com>",
+  "license": "ISC",
+  "dependencies": {
+    "coffee-script": "^1.9.3",
+    "minimatch": "^2.0.8",
+    "pretty-error": "^1.1.2",
+    "pretty-hrtime": "^1.0.0",
+    "q": "^1.4.1",
+    "q-io": "^1.13.1",
+    "underscore": "^1.8.3"
+  }
+}
