@@ -6,11 +6,15 @@ URL    = require("url")
 path   = require("path")
 events = require("events")
 _      = require("underscore")
+stream = require("stream")
+concat = require('concat-stream')
 coffee = require("coffee-script")
 minimatch = require("minimatch")
+browserify = require("../node-browserify")
 prettyHrtime = require('pretty-hrtime')
 
 PORT = 8080
+ROOT = path.dirname(__filename) + "/src"
 
 # TODO:
 #   coffeescript
@@ -18,6 +22,7 @@ PORT = 8080
 #   browserify / watchify
 #   generate index files
 #   annotate
+#   query args, pattern ordering
 #
 #   sass
 #   compass
@@ -34,7 +39,7 @@ staticHandler = (root) ->
 
 coffeeHandler = (options) ->
   return (env) ->
-    filename = "src/" + path.basename(env.url, ".js") + ".coffee"
+    filename = path.basename(env.url, ".js") + ".coffee"
     get(filename)
       .then (content) ->
         # console.log "got cofee to compile", content
@@ -47,6 +52,100 @@ coffeeHandler = (options) ->
           if error.stack
             console.log error.stack
           errorHandler(env, error.toString() + "\n")
+
+browserifyHandler = (options) ->
+  fs = require("fs")
+
+  myFS = _.extend Object.create(fs),
+    readFile: (filename, options, callback) ->
+      if filename.indexOf(ROOT) == 0
+        # console.log "readFile", arguments
+
+        if typeof options == "function"
+          callback = options
+          options = null
+
+        pathname = path.relative(ROOT, filename)
+
+        get(pathname)
+          .then (result) ->
+            callback(null, result)
+          .catch (error) ->
+            callback(error, null)
+          .done()
+
+      else
+        return fs.readFile(arguments...)
+    realpath: (filename, cache, callback) ->
+      if filename.indexOf(ROOT) == 0
+        # console.log "realpath", arguments
+
+        if typeof cache == "function"
+          callback = cache
+          cache = null
+
+        if path.isAbsolute(filename)
+          callback(null, filename)
+        else
+          throw new Error("realpath: relative realpath not implemented")
+      else
+        return fs.realpath(arguments...)
+    createReadStream: (filename) ->
+      if filename.indexOf(ROOT) == 0
+        # console.log "createReadStream", arguments
+        s = new stream.Readable()
+        s._read = ->
+        pathname = path.relative(ROOT, filename)
+        get(pathname)
+          .then (result) ->
+            s.push(result)
+            s.push(null)
+          .catch (error) ->
+            s.emit("error", error)
+          .done()
+
+        return s
+      else
+        return fs.createReadStream(arguments...)
+    isFile: (filename, callback) ->
+
+      if filename.indexOf(ROOT) == 0
+        # console.log "isFile", arguments
+        pathname = path.relative(ROOT, filename)
+        get(pathname)
+          .then -> callback(null, true)
+          .catch (error) ->
+            if error.code == "ENOENT"
+              callback(null, false)
+            else
+              callback(error, null)
+          .done()
+
+      else
+        # default implementation from resolve package
+        fs.stat filename, (err, stat) ->
+          if err && err.code == 'ENOENT'
+            callback(null, false)
+          else if err
+            callback(err)
+          else
+            callback(null, stat.isFile() || stat.isFIFO())
+
+  bundle = browserify(cache: {}, packageCache: {}, fs: myFS, browserField: false, debug: false)
+
+  return (env) ->
+    source = options.source || "." + env.url
+
+    deferred = Q.defer()
+
+    bundle.reset()
+    bundle
+      .add(source)
+      .bundle()
+      .pipe concat (buf) ->
+        deferred.resolve(buf)
+
+    return deferred.promise
 
 errorHandler = (env, body = "") ->
   [500, {"Content-Type": "text/plain"}, body || "500 Internal server error\n"]
@@ -141,7 +240,7 @@ get = (url) ->
 
   deferred.promise
 
-createHandler = (config) ->
+createHandlers = (config) ->
   routes = _.clone(config.routes)
 
   # default that always matches
@@ -172,10 +271,12 @@ createHandler = (config) ->
         sendResponse(response, errorHandler({}))
       .done()
 
-handleRequest = createHandler
+requestHandler = createHandlers
   routes:
-    "/src/*.js": coffeeHandler()
-    "/src/*.coffee": staticHandler(".")
+    "/bundle.js": browserifyHandler(source: "./hello.js")
+    "/message.js": staticHandler(ROOT)
+    "/*.js": coffeeHandler()
+    "/*.coffee": staticHandler(ROOT)
 
-
-http.createServer(handleRequest).listen(PORT)
+process.chdir(ROOT)
+http.createServer(requestHandler).listen(PORT)
