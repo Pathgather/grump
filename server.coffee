@@ -1,6 +1,7 @@
 http   = require("http")
 Q      = require("q")
 FS     = require("q-io/fs")
+fs     = require("fs")
 Reader = require("q-io/reader")
 URL    = require("url")
 path   = require("path")
@@ -10,7 +11,8 @@ stream = require("stream")
 concat = require('concat-stream')
 coffee = require("coffee-script")
 minimatch = require("minimatch")
-browserify = require("../node-browserify")
+proxyquire = require('proxyquire')
+
 prettyHrtime = require('pretty-hrtime')
 
 PORT = 8080
@@ -54,91 +56,102 @@ coffeeHandler = (options) ->
           errorHandler(env, error.toString() + "\n")
 
 browserifyHandler = (options) ->
-  fs = require("fs")
 
-  myFS = _.extend Object.create(fs),
-    readFile: (filename, options, callback) ->
-      if filename.indexOf(ROOT) == 0
-        # console.log "readFile", arguments
+  # grumpFS = _.extend Object.create(fs),
+  #   readFile: (filename, options, callback) ->
+  #     if filename.indexOf(ROOT) == 0
+  #       # console.log "readFile", arguments
 
-        if typeof options == "function"
-          callback = options
-          options = null
+  #       if typeof options == "function"
+  #         callback = options
+  #         options = null
 
-        pathname = path.relative(ROOT, filename)
+  #       pathname = path.relative(ROOT, filename)
 
-        get(pathname)
-          .then (result) ->
-            callback(null, result)
-          .catch (error) ->
-            callback(error, null)
-          .done()
+  #       get(pathname)
+  #         .then (result) ->
+  #           callback(null, result)
+  #         .catch (error) ->
+  #           callback(error, null)
+  #         .done()
 
-      else
-        return fs.readFile(arguments...)
-    realpath: (filename, cache, callback) ->
-      if filename.indexOf(ROOT) == 0
-        # console.log "realpath", arguments
+  #     else
+  #       return fs.readFile(arguments...)
+  #   realpath: (filename, cache, callback) ->
+  #     if filename.indexOf(ROOT) == 0
+  #       # console.log "realpath", arguments
 
-        if typeof cache == "function"
-          callback = cache
-          cache = null
+  #       if typeof cache == "function"
+  #         callback = cache
+  #         cache = null
 
-        if path.isAbsolute(filename)
-          callback(null, filename)
-        else
-          throw new Error("realpath: relative realpath not implemented")
-      else
-        return fs.realpath(arguments...)
-    createReadStream: (filename) ->
-      if filename.indexOf(ROOT) == 0
-        # console.log "createReadStream", arguments
-        s = new stream.Readable()
-        s._read = ->
-        pathname = path.relative(ROOT, filename)
-        get(pathname)
-          .then (result) ->
-            s.push(result)
-            s.push(null)
-          .catch (error) ->
-            s.emit("error", error)
-          .done()
+  #       if path.isAbsolute(filename)
+  #         callback(null, filename)
+  #       else
+  #         throw new Error("realpath: relative realpath not implemented")
+  #     else
+  #       return fs.realpath(arguments...)
+  #   createReadStream: (filename) ->
+  #     if filename.indexOf(ROOT) == 0
+  #       # console.log "createReadStream", arguments
+  #       s = new stream.Readable()
+  #       s._read = ->
+  #       pathname = path.relative(ROOT, filename)
+  #       get(pathname)
+  #         .then (result) ->
+  #           s.push(result)
+  #           s.push(null)
+  #         .catch (error) ->
+  #           s.emit("error", error)
+  #         .done()
 
-        return s
-      else
-        return fs.createReadStream(arguments...)
-    isFile: (filename, callback) ->
+  #       return s
+  #     else
+  #       return fs.createReadStream(arguments...)
+  #   isFile: (filename, callback) ->
 
-      if filename.indexOf(ROOT) == 0
-        # console.log "isFile", arguments
-        pathname = path.relative(ROOT, filename)
-        get(pathname)
-          .then -> callback(null, true)
-          .catch (error) ->
-            if error.code == "ENOENT"
-              callback(null, false)
-            else
-              callback(error, null)
-          .done()
+  #     if filename.indexOf(ROOT) == 0
+  #       # console.log "isFile", arguments
+  #       pathname = path.relative(ROOT, filename)
+  #       get(pathname)
+  #         .then -> callback(null, true)
+  #         .catch (error) ->
+  #           if error.code == "ENOENT"
+  #             callback(null, false)
+  #           else
+  #             callback(error, null)
+  #         .done()
 
-      else
-        # default implementation from resolve package
-        fs.stat filename, (err, stat) ->
-          if err && err.code == 'ENOENT'
-            callback(null, false)
-          else if err
-            callback(err)
-          else
-            callback(null, stat.isFile() || stat.isFIFO())
+  #     else
+  #       # default implementation from resolve package
+  #       fs.stat filename, (err, stat) ->
+  #         if err && err.code == 'ENOENT'
+  #           callback(null, false)
+  #         else if err
+  #           callback(err)
+  #         else
+  #           callback(null, stat.isFile() || stat.isFIFO())
 
-  bundle = browserify(cache: {}, packageCache: {}, fs: myFS, browserField: false, debug: false)
+  grumpFS = {}
+
+
+  for fn of fs
+    do (fn) ->
+      grumpFS[fn] = ->
+        console.log "grumpFS", fn, arguments[0]
+        return fs[fn](arguments...)
+
+  browserify = proxyquire("browserify",
+    fs: grumpFS
+    "module-deps": proxyquire('browserify/node_modules/module-deps', fs: grumpFS))
+
+  bundle = browserify()
 
   return (env) ->
     source = options.source || "." + env.url
 
     deferred = Q.defer()
 
-    bundle.reset()
     bundle
       .add(source)
       .bundle()
