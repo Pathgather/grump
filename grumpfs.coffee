@@ -7,6 +7,24 @@ proxyquire = require('proxyquire')
 stream = require("stream")
 concat = require('concat-stream')
 
+# run all handlers until one of them resolves to a value
+AnyHandler = (handlers...) ->
+  return (file) ->
+    idx = 0
+
+    catchHandler = (error) ->
+      if handlers[idx]
+        result = handlers[idx](file)
+        Promise.resolve(result)
+          .catch (error) ->
+            idx += 1
+            catchHandler(error)
+
+      else
+        Promise.reject(error)
+
+    catchHandler()
+
 CoffeeHandler = (grump, options = {}) ->
   return (file) ->
     file = file.replace(/\.js$/, ".coffee")
@@ -20,10 +38,12 @@ StaticHandler = ->
         err && reject(err) || resolve(result)
 
 BrowserifyHandler = (grump, options = {}) ->
-  mdeps = proxyquire('browserify/node_modules/module-deps', fs: grump.fs)
   browserify = proxyquire("browserify",
     fs: grump.fs
-    "module-deps": mdeps)
+    resolve: proxyquire("browserify/node_modules/resolve",
+      "./lib/async": proxyquire("browserify/node_modules/resolve/lib/async", fs: grump.fs))
+    "browser-resolve": proxyquire("browserify/node_modules/browser-resolve", fs: grump.fs)
+    "module-deps": proxyquire("browserify/node_modules/module-deps", fs: grump.fs))
 
   return (file) ->
     file = file.replace(/\?bundle$/, "")
@@ -31,7 +51,7 @@ BrowserifyHandler = (grump, options = {}) ->
     new Promise (resolve, reject) ->
       output = concat (buf) -> resolve(buf)
       browserify(options)
-        .on("error", -> console.log "error", arguments)
+        .on("error", -> console.log "browserify error", arguments)
         .add(file)
         .bundle()
         .pipe(output)
@@ -41,24 +61,24 @@ NotFoundError = (filename) ->
   code: "ENOENT"
   path: filename
 
-Grump = (root, configFunc) ->
-  root = fs.realpathSync(root)
-  grump = @
+ReturnTrue = -> true
+ReturnFalse = -> false
 
-  if typeof configFunc != "function"
-    throw new Error("grump: missing config function")
+FileStat = (result) ->
+  isFile: ReturnTrue
+  isDirectory: ReturnFalse
+  isFIFO: ReturnFalse
+  size: result.length
 
-  @get = (filename) ->
-      console.log "grump: getting", filename
+DirStat = ->
+  isFile: ReturnFalse
+  isDirectory: ReturnTrue
+  isFIFO: ReturnFalse
 
-      if handler = findHandler(filename)
-        Promise.resolve(handler(filename, this))
-      else
-        Promise.reject(new NotFoundError(filename))
-
-  @fs = {
+GrumpFS = (root, grump) ->
+  grumpfs = {
     createReadStream: (filename, options) ->
-      console.log "createReadStream", filename, options
+      console.log "createReadStream", filename
 
       st = new stream.Readable()
       st._read = ->
@@ -94,33 +114,82 @@ Grump = (root, configFunc) ->
 
     stat: (filename, callback) ->
       console.log "stat", filename
+      grump.get(filename)
+        .then (result) ->
+          callback(null, FileStat(result))
+        .catch (error) ->
+          if error.code == "EISDIR"
+            callback(null, DirStat())
+          else
+            callback(error, null)
   }
 
-  options = configFunc(@)
+  # only run the functions above if the path is in the root
+  checkRootFilename = (fn, fallback_fn) ->
+    return (filename) ->
+      if not path.isAbsolute(filename) or filename.indexOf("../") >= 0
+        filename = path.resolve(filename)
 
-  routes = options.routes || {}
+      if filename.substring(0, root.length) == root
+        fn(arguments...)
+      else
+        fallback_fn(arguments...)
 
-  findHandler = (filename) ->
-    for route, handler of routes
-      if minimatch(filename, route)
-        console.log "route matched", route
-        return handler
+  for func in Object.keys(grumpfs)
+    grumpfs[func] = checkRootFilename(grumpfs[func], fs[func])
 
-    return null
+  # add logging to all non overridden fs methods
+  logArguments = (func) ->
+    return ->
+      console.log "grump.fs: passing through to", func, arguments...
+      return fs[func](arguments...)
 
-  return
+  for func of require("fs")
+    if not grumpfs[func]
+      grumpfs[func] = logArguments(func)
 
-grump = new Grump ".", (grump) ->
+  return grumpfs
+
+class Grump
+  constructor: (root, configFunc) ->
+    root = fs.realpathSync(root)
+
+    if typeof configFunc != "function"
+      throw new Error("grump: missing config function")
+
+    findHandler = (filename) ->
+      for route, handler of routes
+        if minimatch(filename, route)
+          # console.log "route matched", route, "with", filename
+          return handler
+
+      return null
+
+    @get = (filename) ->
+        # console.log "grump: getting", filename
+        if handler = findHandler(filename)
+          Promise.resolve(handler(filename, this))
+        else
+          Promise.reject(new NotFoundError(filename))
+
+    @fs = new GrumpFS(root, @)
+
+    options = configFunc(@)
+    routes = options.routes || {}
+
+grump = new Grump "src", (grump) ->
+  coffeeHandler = CoffeeHandler(grump)
+  staticHandler = StaticHandler()
   routes:
     "**/*.js?bundle": BrowserifyHandler(grump)
-    "*.js": CoffeeHandler(grump)
-    "**": StaticHandler()
+    "**/*.js": AnyHandler(coffeeHandler, staticHandler)
+    "**": staticHandler
 
 logread = (err, data) ->
   if data and data.substring
     data = data.substring(0,200) + "..."
 
-  console.log "logread: err =", err, "data =", data.toString()
+  console.log "logread: err =", err, "data =", data.length
 
 # fs.readFile("grumpfz.coffee", encoding: "utf8", logread)
 grump.fs.readFile("src/hello.js?bundle", encoding: "utf8", logread)
