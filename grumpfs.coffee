@@ -6,6 +6,9 @@ coffee = require("coffee-script")
 proxyquire = require('proxyquire')
 stream = require("stream")
 concat = require('concat-stream')
+prettyHrtime = require('pretty-hrtime')
+through = require('through2')
+colors = require('colors')
 
 # run all handlers until one of them resolves to a value
 AnyHandler = (handlers...) ->
@@ -45,16 +48,53 @@ BrowserifyHandler = (grump, options = {}) ->
     "browser-resolve": proxyquire("browserify/node_modules/browser-resolve", fs: grump.fs)
     "module-deps": proxyquire("browserify/node_modules/module-deps", fs: grump.fs))
 
-  return (file) ->
-    file = file.replace(/\?bundle$/, "")
+  cache = {}
+  fileCache = {}
+  packageCache = {}
+
+  count = 0
+
+  return (targetFile) ->
+    console.log "bundle requested for", targetFile
+    count += 1
+    targetFile = targetFile.replace(/\?bundle$/, "")
+
+    options.cache = cache
+    options.fileCache = fileCache
+    options.packageCache = packageCache
+
+    bundle = syncBench "new bundle", -> browserify([], options)
 
     new Promise (resolve, reject) ->
-      output = concat (buf) -> resolve(buf)
-      browserify(options)
+
+      # bundle.reset()
+
+      bundle.pipeline.get("deps").push through.obj (row, enc, next) ->
+        # this is for module-deps
+        file = row.expose && bundle._expose[row.id] || row.file
+        cache[file] =
+            source: row.source,
+            deps: _.extend({}, row.deps)
+
+        this.push(row)
+        next()
+
+      bundle
         .on("error", -> console.log "browserify error", arguments)
-        .add(file)
-        .bundle()
-        .pipe(output)
+        .add(targetFile)
+        .bundle (err, body) ->
+          console.log "bundle complete"
+
+          if count == 3
+
+            console.log "cache", cache
+            console.log "fileCache", fileCache
+            console.log "packageCache", packageCache
+
+          if err
+            reject(err)
+          else
+            resolve(body.toString())
 
 NotFoundError = (filename) ->
   errno: -2
@@ -78,7 +118,7 @@ DirStat = ->
 GrumpFS = (root, grump) ->
   grumpfs = {
     createReadStream: (filename, options) ->
-      console.log "createReadStream", filename
+      console.log ("createReadStream " + filename).gray
 
       st = new stream.Readable()
       st._read = ->
@@ -92,7 +132,7 @@ GrumpFS = (root, grump) ->
       return st
 
     readFile: (filename, options, callback) ->
-      console.log "readFile", filename
+      console.log ("readFile " + filename).gray
       if typeof options == "function"
         callback = options
         options = null
@@ -102,7 +142,7 @@ GrumpFS = (root, grump) ->
         .catch (error) -> callback(error, null)
 
     realpath: (filename, cache, callback) ->
-      console.log "realpath", filename
+      console.log ("realpath " + filename).gray
 
       if typeof cache == "function"
         callback = cache
@@ -113,7 +153,7 @@ GrumpFS = (root, grump) ->
       callback(null, filename)
 
     stat: (filename, callback) ->
-      console.log "stat", filename
+      console.log ("stat " + filename).gray
       grump.get(filename)
         .then (result) ->
           callback(null, FileStat(result))
@@ -157,7 +197,7 @@ class Grump
     if typeof configFunc != "function"
       throw new Error("grump: missing config function")
 
-    findHandler = (filename) ->
+    findHandler = (filename, routes) ->
       for route, handler of routes
         if minimatch(filename, route)
           # console.log "route matched", route, "with", filename
@@ -165,11 +205,33 @@ class Grump
 
       return null
 
+    @cache = cache = {}
+
     @get = (filename) ->
         # console.log "grump: getting", filename
-        if handler = findHandler(filename)
-          Promise.resolve(handler(filename, this))
+        if filename.indexOf("?bundle") == -1
+          switch typeof @cache[filename]
+            when "string"
+              console.log ("cache hit for " + filename).green
+              return Promise.resolve(@cache[filename])
+            when "undefined"
+              break
+            when "object"
+              console.log ("cache hit for (error) " + filename).green
+              return Promise.reject(@cache[filename])
+
+        if handler = findHandler(filename, routes)
+          Promise.resolve(handler(filename, @))
+            .then (result) ->
+              console.log "cache save for", filename
+              cache[filename] = result
+            .catch (error) ->
+              console.log "cache save for error", filename
+              cache[filename] = error
+              return Promise.reject(error)
+
         else
+          console.log "Grump.get didn't resolve file", filename
           Promise.reject(new NotFoundError(filename))
 
     @fs = new GrumpFS(root, @)
@@ -191,5 +253,22 @@ logread = (err, data) ->
 
   console.log "logread: err =", err, "data =", data.length
 
+asyncBench = (message = "", fn) ->
+  start = process.hrtime()
+  return ->
+    done = process.hrtime(start)
+    fn(arguments...)
+    console.log message, "time", prettyHrtime(done).white
+
+syncBench = (message = "", fn) ->
+  start = process.hrtime()
+  result = fn()
+  done = process.hrtime(start)
+  console.log message, "time", prettyHrtime(done).white
+  return result
+
 # fs.readFile("grumpfz.coffee", encoding: "utf8", logread)
-grump.fs.readFile("src/hello.js?bundle", encoding: "utf8", logread)
+grump.fs.readFile "src/hello.js?bundle", encoding: "utf8", ->
+  grump.fs.readFile("src/hello.js?bundle", encoding: "utf8", asyncBench("try 2x", logread))
+
+module.exports = {AnyHandler, BrowserifyHandler, CoffeeHandler, StaticHandler, GrumpFS, Grump}
