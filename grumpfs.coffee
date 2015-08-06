@@ -12,12 +12,12 @@ colors = require('colors')
 
 # run all handlers until one of them resolves to a value
 AnyHandler = (handlers...) ->
-  return (file) ->
+  return (file, grump) ->
     idx = 0
 
     catchHandler = (error) ->
       if handlers[idx]
-        result = handlers[idx](file)
+        result = handlers[idx](file, grump)
         Promise.resolve(result)
           .catch (error) ->
             idx += 1
@@ -28,11 +28,19 @@ AnyHandler = (handlers...) ->
 
     catchHandler()
 
-CoffeeHandler = (grump, options = {}) ->
-  return (file) ->
+CoffeeHandler = (options = {}) ->
+  return (file, grump) ->
     file = file.replace(/\.js$/, ".coffee")
     grump.get(file).then (source) ->
       coffee.compile(source, options)
+
+HamlCHandler = (options = {}) ->
+  hamlc = require('haml-coffee')
+  return (file, grump) ->
+    htmlfile = file.replace(".html", ".haml")
+    grump.get(htmlfile)
+      .then (source) ->
+        hamlc.render(source)
 
 StaticHandler = ->
   return (file) ->
@@ -40,13 +48,16 @@ StaticHandler = ->
       fs.readFile file, {encoding: "utf8"}, (err, result) ->
         err && reject(err) || resolve(result)
 
-BrowserifyHandler = (grump, options = {}) ->
-  browserify = proxyquire("browserify",
-    fs: grump.fs
-    resolve: proxyquire("browserify/node_modules/resolve",
-      "./lib/async": proxyquire("browserify/node_modules/resolve/lib/async", fs: grump.fs))
-    "browser-resolve": proxyquire("browserify/node_modules/browser-resolve", fs: grump.fs)
-    "module-deps": proxyquire("browserify/node_modules/module-deps", fs: grump.fs))
+BrowserifyHandler = (options = {}) ->
+  browserify = null
+
+  initBrowserify = _.once (grump) ->
+    browserify = proxyquire("browserify",
+      fs: grump.fs
+      resolve: proxyquire("browserify/node_modules/resolve",
+        "./lib/async": proxyquire("browserify/node_modules/resolve/lib/async", fs: grump.fs))
+      "browser-resolve": proxyquire("browserify/node_modules/browser-resolve", fs: grump.fs)
+      "module-deps": proxyquire("browserify/node_modules/module-deps", fs: grump.fs))
 
   cache = {}
   fileCache = {}
@@ -54,7 +65,10 @@ BrowserifyHandler = (grump, options = {}) ->
 
   count = 0
 
-  return (targetFile) ->
+  return (targetFile, grump) ->
+
+    initBrowserify(grump)
+
     console.log "bundle requested for", targetFile
     count += 1
     targetFile = targetFile.replace(/\?bundle$/, "")
@@ -63,7 +77,8 @@ BrowserifyHandler = (grump, options = {}) ->
     options.fileCache = fileCache
     options.packageCache = packageCache
 
-    bundle = syncBench "new bundle", -> browserify([], options)
+    bundle = syncBench "new bundle", ->
+      browserify([], _.extend(options, basedir: path.dirname(targetFile)))
 
     new Promise (resolve, reject) ->
 
@@ -79,13 +94,16 @@ BrowserifyHandler = (grump, options = {}) ->
         this.push(row)
         next()
 
+      fileStream = grump.fs.createReadStream(targetFile)
+      fileStream.file = targetFile
+
       bundle
         .on("error", -> console.log "browserify error", arguments)
-        .add(targetFile)
+        .add(fileStream)
         .bundle (err, body) ->
           console.log "bundle complete"
 
-          if count == 3
+          if count == 2
 
             console.log "cache", cache
             console.log "fileCache", fileCache
@@ -191,11 +209,9 @@ GrumpFS = (root, grump) ->
   return grumpfs
 
 class Grump
-  constructor: (root, configFunc) ->
-    root = fs.realpathSync(root)
-
-    if typeof configFunc != "function"
-      throw new Error("grump: missing config function")
+  constructor: (config) ->
+    root = fs.realpathSync(config.root || ".")
+    routes = config.routes || {}
 
     findHandler = (filename, routes) ->
       for route, handler of routes
@@ -205,29 +221,32 @@ class Grump
 
       return null
 
-    @cache = cache = {}
+    @cache = cache = {
+      get: (key) -> @[key]
+      set: (key, data) -> @[key] = data
+    }
 
     @get = (filename) ->
         # console.log "grump: getting", filename
         if filename.indexOf("?bundle") == -1
-          switch typeof @cache[filename]
+          switch typeof cache.get(filename)
             when "string"
-              console.log ("cache hit for " + filename).green
-              return Promise.resolve(@cache[filename])
+              console.log "cache hit for".green, filename
+              return Promise.resolve(cache.get(filename))
             when "undefined"
               break
             when "object"
-              console.log ("cache hit for (error) " + filename).green
-              return Promise.reject(@cache[filename])
+              console.log "cache hit for".green, "(error)".red, filename
+              return Promise.reject(cache.get(filename))
 
         if handler = findHandler(filename, routes)
           Promise.resolve(handler(filename, @))
             .then (result) ->
               console.log "cache save for", filename
-              cache[filename] = result
+              cache.set(filename, result)
             .catch (error) ->
-              console.log "cache save for error", filename
-              cache[filename] = error
+              console.log "cache save for " + "error".red, filename
+              cache.set(filename, error)
               return Promise.reject(error)
 
         else
@@ -236,22 +255,22 @@ class Grump
 
     @fs = new GrumpFS(root, @)
 
-    options = configFunc(@)
-    routes = options.routes || {}
+coffeeHandler = CoffeeHandler(grump)
+staticHandler = StaticHandler()
 
-grump = new Grump "src", (grump) ->
-  coffeeHandler = CoffeeHandler(grump)
-  staticHandler = StaticHandler()
+grump = new Grump
+  root: "src"
   routes:
     "**/*.js?bundle": BrowserifyHandler(grump)
     "**/*.js": AnyHandler(coffeeHandler, staticHandler)
+    "**/*.html": HamlCHandler()
     "**": staticHandler
 
 logread = (err, data) ->
-  if data and data.substring
-    data = data.substring(0,200) + "..."
-
-  console.log "logread: err =", err, "data =", data.length
+  # if data and data.substring
+  #   data = data.substring(0,200) + "..."
+  logError(err) if err
+  console.log "logread: err =", err, "data =", data
 
 asyncBench = (message = "", fn) ->
   start = process.hrtime()
@@ -267,8 +286,18 @@ syncBench = (message = "", fn) ->
   console.log message, "time", prettyHrtime(done).white
   return result
 
+logError = (error) ->
+  if error.stack
+    console.log "error".red, error.stack
+  else
+    console.log "error".red, error.toString()
+
 # fs.readFile("grumpfz.coffee", encoding: "utf8", logread)
-grump.fs.readFile "src/hello.js?bundle", encoding: "utf8", ->
-  grump.fs.readFile("src/hello.js?bundle", encoding: "utf8", asyncBench("try 2x", logread))
+# grump.fs.readFile "src/hello.js?bundle", encoding: "utf8", (err, src) ->
+#   logError(err) if err
+
+#   grump.fs.readFile("src/hello.js?bundle", encoding: "utf8", asyncBench("try 2x", logread))
+
+grump.fs.readFile "src/hello.html", encoding: "utf8", logread
 
 module.exports = {AnyHandler, BrowserifyHandler, CoffeeHandler, StaticHandler, GrumpFS, Grump}
