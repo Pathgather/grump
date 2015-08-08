@@ -229,18 +229,27 @@ class Grump
     @get = (filename) ->
         # console.log "grump: getting", filename
         if filename.indexOf("?bundle") == -1
-          switch typeof cache.get(filename)
+          cached = cache.get(filename)
+          switch typeof cached
             when "string"
               console.log "cache hit for".green, filename
-              return Promise.resolve(cache.get(filename))
+              return Promise.resolve(cached)
             when "undefined"
               break
             when "object"
-              console.log "cache hit for".green, "(error)".red, filename
-              return Promise.reject(cache.get(filename))
+              if typeof cached.then == "function"
+                console.log "cache hit for".green, "promise".yellow, filename
+                return cached
+              else
+                # assume it's an error
+                console.log "cache hit for".green, "error".red, filename
+                return Promise.reject(cached)
 
         if handler = findHandler(filename, routes)
-          Promise.resolve(handler(filename, @))
+          console.log "running handler for #{filename}".yellow
+          promise = handler(filename, @)
+          cache.set(filename, promise)
+          Promise.resolve(promise)
             .then (result) ->
               console.log "cache save for", filename
               cache.set(filename, result)
@@ -294,10 +303,14 @@ logError = (error) ->
 
 # fs.readFile("grumpfz.coffee", encoding: "utf8", logread)
 # grump.fs.readFile "src/hello.js?bundle", encoding: "utf8", (err, src) ->
-#   logError(err) if err
+#   if err
+#     logError(err)
+#   else
+#     console.log "src length", src.length
 
 #   grump.fs.readFile("src/hello.js?bundle", encoding: "utf8", asyncBench("try 2x", logread))
 
-grump.fs.readFile "src/hello.html", encoding: "utf8", logread
+for i in [0...10]
+  grump.fs.readFile "src/hello.html", encoding: "utf8", ->
 
 module.exports = {AnyHandler, BrowserifyHandler, CoffeeHandler, StaticHandler, GrumpFS, Grump}
