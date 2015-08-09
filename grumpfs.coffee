@@ -9,6 +9,7 @@ concat = require('concat-stream')
 prettyHrtime = require('pretty-hrtime')
 through = require('through2')
 colors = require('colors')
+angularTemplates = require('gulp-angular-templates')
 
 # run all handlers until one of them resolves to a value
 AnyHandler = (handlers...) ->
@@ -34,7 +35,45 @@ CoffeeHandler = (options = {}) ->
     grump.get(file).then (source) ->
       coffee.compile(source, options)
 
-HamlCHandler = (options = {}) ->
+GulpHandler = (options = {}) ->
+  File = require("vinyl")
+  stream = require("stream")
+
+  if typeof options.transform != "function"
+    throw new Error("GulpHandler: transform option to be a function that returns a transform stream")
+
+  if not _.isArray(options.files) or options.files.length == 0
+    throw new Error("GulpHandler: required files option missing")
+
+  return (file, grump) ->
+    new Promise (resolve, reject) ->
+
+      transform = options.transform()
+      transform.on("error", reject)
+
+      pipe_in = new stream.Readable(objectMode: true)
+      pipe_in._read = ->
+
+      pipe_in
+        .pipe(transform)
+        .pipe concat (files) ->
+          # join all vinyl files together to resolve the promise
+          buffers = files.map (file) -> file.contents
+          resolve(Buffer.concat(buffers))
+
+      promises = _.map options.files, (filename) ->
+        _.tap grump.get(filename), (promise) ->
+          promise.then (result) ->
+            pipe_in.push(
+              new File(
+                path: filename
+                contents: new Buffer(result)))
+
+      Promise.all(promises)
+        .then -> pipe_in.push(null)
+        .catch(reject)
+
+HamlHandler = (options = {}) ->
   hamlc = require('haml-coffee')
   return (file, grump) ->
     htmlfile = file.replace(".html", ".haml")
@@ -227,23 +266,16 @@ class Grump
     }
 
     @get = (filename) ->
-        # console.log "grump: getting", filename
-        if filename.indexOf("?bundle") == -1
-          cached = cache.get(filename)
-          switch typeof cached
-            when "string"
-              console.log "cache hit for".green, filename
-              return Promise.resolve(cached)
-            when "undefined"
-              break
-            when "object"
-              if typeof cached.then == "function"
-                console.log "cache hit for".green, "promise".yellow, filename
-                return cached
-              else
-                # assume it's an error
-                console.log "cache hit for".green, "error".red, filename
-                return Promise.reject(cached)
+        if cached = cache.get(filename)
+          if typeof cached.then == "function"
+            console.log "cache hit for".green, "promise".yellow, filename
+            return cached
+          else if cached instanceof Buffer or typeof cached == "string"
+            console.log "cache hit for".green, filename
+            return Promise.resolve(cached)
+          else # assume it's an error
+            console.log "cache hit for".green, "error".red, filename
+            return Promise.reject(cached)
 
         if handler = findHandler(filename, routes)
           console.log "running handler for #{filename}".yellow
@@ -270,16 +302,23 @@ staticHandler = StaticHandler()
 grump = new Grump
   root: "src"
   routes:
+    "**/templates.js": GulpHandler
+      files: ["src/hello.html"]
+      transform: ->
+        angularTemplates
+          basePath: "/"
+          module: "Pathgather"
+          standalone: false
     "**/*.js?bundle": BrowserifyHandler(grump)
     "**/*.js": AnyHandler(coffeeHandler, staticHandler)
-    "**/*.html": HamlCHandler()
+    "**/*.html": HamlHandler()
     "**": staticHandler
 
-logread = (err, data) ->
-  # if data and data.substring
-  #   data = data.substring(0,200) + "..."
-  logError(err) if err
-  console.log "logread: err =", err, "data =", data
+logRead = (err, src) ->
+  if err
+    logError(err)
+  else
+    console.log "src", src.toString()
 
 asyncBench = (message = "", fn) ->
   start = process.hrtime()
@@ -301,16 +340,17 @@ logError = (error) ->
   else
     console.log "error".red, error.toString()
 
-# fs.readFile("grumpfz.coffee", encoding: "utf8", logread)
+# fs.readFile("grumpfz.coffee", encoding: "utf8", logRead)
 # grump.fs.readFile "src/hello.js?bundle", encoding: "utf8", (err, src) ->
 #   if err
 #     logError(err)
 #   else
 #     console.log "src length", src.length
 
-#   grump.fs.readFile("src/hello.js?bundle", encoding: "utf8", asyncBench("try 2x", logread))
+#   grump.fs.readFile("src/hello.js?bundle", encoding: "utf8", asyncBench("try 2x", logRead))
 
-for i in [0...10]
-  grump.fs.readFile "src/hello.html", encoding: "utf8", ->
+# for i in [0...10]
+#   grump.fs.readFile "src/hello.html", encoding: "utf8", ->
 
-module.exports = {AnyHandler, BrowserifyHandler, CoffeeHandler, StaticHandler, GrumpFS, Grump}
+grump.fs.readFile("src/templates.js", logRead)
+
