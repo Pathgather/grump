@@ -59,7 +59,7 @@ GulpHandler = (options = {}) ->
         .pipe concat (files) ->
           # join all vinyl files together to resolve the promise
           buffers = files.map (file) -> file.contents
-          resolve(Buffer.concat(buffers))
+          resolve(Buffer.concat(buffers).toString())
 
       promises = _.map options.files, (filename) ->
         _.tap grump.get(filename), (promise) ->
@@ -247,57 +247,65 @@ GrumpFS = (root, grump) ->
 
   return grumpfs
 
+class GrumpCache
+  constructor: -> @_cache = {}
+  get: (key) -> @_cache[key]
+  init: (key) -> @_cache[key] = {deps: [], result: null}
+
 class Grump
   constructor: (config) ->
-    root = fs.realpathSync(config.root || ".")
-    routes = config.routes || {}
+    @root = fs.realpathSync(config.root || ".")
+    @routes = config.routes || {}
+    @cache = new GrumpCache()
+    @fs = new GrumpFS(@root, @)
 
-    findHandler = (filename, routes) ->
-      for route, handler of routes
-        if minimatch(filename, route)
-          # console.log "route matched", route, "with", filename
-          return handler
+  getUncached: (filename, deps) ->
+    if handler = @findHandler(filename)
+      console.log "running handler for #{filename}".yellow
 
-      return null
+      # wrap grump into something that records the calls to "get" to
+      # build the dependency graph.
+      oldGet = @get
+      grump = _.extend Object.create(@),
+        get: (_filename) ->
+          deps.push(_filename)
+          oldGet(_filename)
 
-    @cache = cache = {
-      get: (key) -> @[key]
-      set: (key, data) -> @[key] = data
-    }
+      Promise.resolve(handler(filename, grump))
+    else
+      Promise.reject(new NotFoundError(filename))
 
-    @get = (filename) ->
-        if cached = cache.get(filename)
-          if typeof cached.then == "function"
-            console.log "cache hit for".green, "promise".yellow, filename
-            return cached
-          else if cached instanceof Buffer or typeof cached == "string"
-            console.log "cache hit for".green, filename
-            return Promise.resolve(cached)
-          else # assume it's an error
-            console.log "cache hit for".green, "error".red, filename
-            return Promise.reject(cached)
+  get: (filename) =>
+    filename = path.resolve(filename)
 
-        if handler = findHandler(filename, routes)
-          console.log "running handler for #{filename}".yellow
-          promise = handler(filename, @)
-          cache.set(filename, promise)
-          Promise.resolve(promise)
-            .then (result) ->
-              console.log "cache save for", filename
-              cache.set(filename, result)
-            .catch (error) ->
-              console.log "cache save for " + "error".red, filename
-              cache.set(filename, error)
-              return Promise.reject(error)
+    if result = @cache.get(filename)?.result
+      if typeof result.then == "function"
+        console.log "cache hit for".green, "promise".yellow, filename
+        return result
+      else if result instanceof Buffer or typeof result == "string"
+        console.log "cache hit for".green, filename
+        return Promise.resolve(result)
+      else # assume it's an error
+        console.log "cache hit for".green, "error".red, filename
+        return Promise.reject(result)
 
-        else
-          console.log "Grump.get didn't resolve file", filename
-          Promise.reject(new NotFoundError(filename))
+    cached = @cache.init(filename)
 
-    @fs = new GrumpFS(root, @)
+    _.tap @getUncached(filename, cached.deps), (promise) ->
+      cached.result = promise
+      promise
+        .then (result) ->
+          console.log "cache save for", filename
+          cached.result = result
+        .catch (error) ->
+          console.log "cache save for " + "error".red, filename
+          cached.result = error
 
-coffeeHandler = CoffeeHandler(grump)
-staticHandler = StaticHandler()
+  findHandler: (filename) ->
+    for route, handler of @routes
+      if minimatch(filename, route)
+        return handler
+    return null
 
 grump = new Grump
   root: "src"
@@ -308,11 +316,10 @@ grump = new Grump
         angularTemplates
           basePath: "/"
           module: "Pathgather"
-          standalone: false
     "**/*.js?bundle": BrowserifyHandler(grump)
-    "**/*.js": AnyHandler(coffeeHandler, staticHandler)
+    "**/*.js": AnyHandler(CoffeeHandler(), StaticHandler())
     "**/*.html": HamlHandler()
-    "**": staticHandler
+    "**": StaticHandler()
 
 logRead = (err, src) ->
   if err
@@ -352,5 +359,11 @@ logError = (error) ->
 # for i in [0...10]
 #   grump.fs.readFile "src/hello.html", encoding: "utf8", ->
 
-grump.fs.readFile("src/templates.js", logRead)
+# setTimeout ->
+#     grump.fs.readFile "src/hello.html", encoding: "utf8", ->
+#   , 2000
+
+grump.fs.readFile "src/templates.js", ->
+  logRead(arguments...)
+  console.log JSON.stringify(grump.cache)
 
