@@ -82,10 +82,15 @@ HamlHandler = (options = {}) ->
         hamlc.render(source)
 
 StaticHandler = ->
-  return (file) ->
+  fn = (file) ->
     new Promise (resolve, reject) ->
       fs.readFile file, {encoding: "utf8"}, (err, result) ->
         err && reject(err) || resolve(result)
+
+  fn.mtime = (file) ->
+    try fs.statSync(file).mtime
+
+  return fn
 
 BrowserifyHandler = (options = {}) ->
   browserify = null
@@ -252,6 +257,31 @@ class GrumpCache
   get: (key) -> @_cache[key]
   init: (key) -> @_cache[key] = {deps: [], result: null}
 
+  # an entry is current (not stale) if:
+  # a) all deps are in cache and current
+  # b) it has an at prop AND mtime prop and mtime() is less than at
+  isCurrent: (key, expire = true) =>
+    entry = @get(key)
+    return false if not entry
+
+    deps_current = _.map(entry.deps, @isCurrent)
+    return false if not _.every(deps_current)
+
+    if entry.mtime
+      mtime = entry.mtime()
+
+      if not entry.at?
+        throw new Error("GrumpCache: possibly pending file tested for isCurrent: #{key}")
+
+      if mtime? and entry.at > mtime
+        return true
+      else
+        if expire
+          @_cache[key] = undefined
+        return false
+    else
+      return true
+
 class Grump
   constructor: (config) ->
     @root = fs.realpathSync(config.root || ".")
@@ -259,47 +289,65 @@ class Grump
     @cache = new GrumpCache()
     @fs = new GrumpFS(@root, @)
 
-  getUncached: (filename, deps) ->
+  getUncached: (filename, cache_entry) ->
     if handler = @findHandler(filename)
       console.log "running handler for #{filename}".yellow
 
       # wrap grump into something that records the calls to "get" to
       # build the dependency graph.
-      oldGet = @get
+      old_get = @getNormalized
       grump = _.extend Object.create(@),
-        get: (_filename) ->
-          deps.push(_filename)
-          oldGet(_filename)
+        getNormalized: (_filename) ->
+          cache_entry.deps.push(_filename)
+          old_get(_filename)
 
-      Promise.resolve(handler(filename, grump))
+      promise = Promise.resolve(handler(filename, grump))
+
+      # if handler has an mtime function, we store the current time on the
+      # cache_entry and the mtime functon to later compare if the underlying
+      # files have been updated.
+      if handler.mtime
+        cache_entry.mtime = _.partial(handler.mtime, filename)
+        updateEntry = (result) ->
+          cache_entry.at = new Date()
+          return result
+
+        promise = promise.then(updateEntry, updateEntry)
+
+      return promise
+
     else
       Promise.reject(new NotFoundError(filename))
 
-  get: (filename) =>
-    filename = path.resolve(filename)
+  getNormalized: (filename) =>
+    if cache_entry = @cache.get(filename)
+      result = cache_entry.result
 
-    if result = @cache.get(filename)?.result
       if typeof result.then == "function"
         console.log "cache hit for".green, "promise".yellow, filename
         return result
-      else if result instanceof Buffer or typeof result == "string"
-        console.log "cache hit for".green, filename
-        return Promise.resolve(result)
-      else # assume it's an error
-        console.log "cache hit for".green, "error".red, filename
-        return Promise.reject(result)
+      else if @cache.isCurrent(filename)
+        if result instanceof Buffer or typeof result == "string"
+          console.log "cache hit for".green, filename
+          return Promise.resolve(result)
+        else # assume it's an error
+          console.log "cache hit for".green, "error".red, filename
+          return Promise.reject(result)
 
-    cached = @cache.init(filename)
+    cache_entry = @cache.init(filename)
 
-    _.tap @getUncached(filename, cached.deps), (promise) ->
-      cached.result = promise
+    _.tap @getUncached(filename, cache_entry), (promise) ->
+      cache_entry.result = promise
       promise
         .then (result) ->
           console.log "cache save for", filename
-          cached.result = result
+          cache_entry.result = result
         .catch (error) ->
           console.log "cache save for " + "error".red, filename
-          cached.result = error
+          cache_entry.result = error
+
+  get: (filename) =>
+    @getNormalized(path.resolve(filename))
 
   findHandler: (filename) ->
     for route, handler of @routes
@@ -363,7 +411,10 @@ logError = (error) ->
 #     grump.fs.readFile "src/hello.html", encoding: "utf8", ->
 #   , 2000
 
-grump.fs.readFile "src/templates.js", ->
-  logRead(arguments...)
-  console.log JSON.stringify(grump.cache)
+grump.fs.readFile("src/templates.js", logRead)
+# fn = -> grump.fs.readFile("src/templates.js", asyncBench("fetcheroo", ->))
+# setInterval(fn, 1000)
 
+# grump.fs.readFile "src/templates.js", ->
+#   logRead(arguments...)
+#   console.log grump.cache
