@@ -4,6 +4,7 @@ path = require("path")
 concat = require('concat-stream')
 coffee = require("coffee-script")
 through = require('through2')
+util = require("./util")
 
 # run all handlers until one of them resolves to a value
 AnyHandler = (handlers...) ->
