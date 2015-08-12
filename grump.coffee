@@ -1,10 +1,15 @@
 _ = require("underscore")
 fs = require("fs")
 path = require("path")
+http = require("http")
 minimatch = require("minimatch")
+prettyHrtime = require('pretty-hrtime')
 
 GrumpFS = require("./grumpfs")
 GrumpCache = require("./grump_cache")
+util = require("./util")
+
+normalizePath = (filename) -> path.resolve(filename)
 
 module.exports = class Grump
   constructor: (config) ->
@@ -21,7 +26,8 @@ module.exports = class Grump
       # build the dependency graph.
       old_get = @getNormalized
       grump = _.extend Object.create(@),
-        getNormalized: (_filename) ->
+        get: (_filename) ->
+          _filename = normalizePath(_filename)
           cache_entry.deps.push(_filename)
           old_get(_filename)
 
@@ -71,10 +77,39 @@ module.exports = class Grump
           cache_entry.result = error
 
   get: (filename) =>
-    @getNormalized(path.resolve(filename))
+    @getNormalized(normalizePath(filename))
 
   findHandler: (filename) ->
     for route, handler of @routes
       if minimatch(filename, route)
         return handler
     return null
+
+  serve: (options = {}) ->
+    if not options.port
+      throw new Error("Grump: missing port option")
+
+    logRequest = (request, response) ->
+      start = process.hrtime()
+      response.on "finish", ->
+        process.stdout.write("#{request.method} #{request.url} - ")
+        time = process.hrtime(start)
+        console.log("Completed", response.statusCode, "in", prettyHrtime(time))
+
+
+    handler = (request, response) =>
+      logRequest(request, response)
+
+      @get(@root + request.url)
+        .then (result) =>
+          response.writeHead(200, {})
+          response.end(result)
+
+          console.log @cache
+        .catch (error) ->
+          util.logError(error)
+
+          response.writeHead(500, {})
+          response.end((error.stack || error).toString())
+
+    http.createServer(handler).listen(options.port)

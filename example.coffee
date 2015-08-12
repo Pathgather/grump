@@ -31,7 +31,10 @@ grump = new Grump
 # setTimeout ->
 #     grump.fs.readFile "src/hello.html", encoding: "utf8", ->
 #   , 2000
-grump.fs.readFile("data/hello.js?bundle", util.logRead)
+
+grump.serve(port: 8080)
+
+# grump.fs.readFile("data/hello.js?bundle", util.logRead)
 # grump.fs.readFile("data/templates.js", util.logRead)
 # fn = -> grump.fs.readFile("src/templates.js", asyncBench("fetcheroo", ->))
 # setInterval(fn, 1000)
