@@ -14,7 +14,6 @@
     "concat-stream": "^1.5.0",
     "minimatch": "^2.0.8",
     "pretty-hrtime": "^1.0.0",
-    "proxyquire": "^1.6.0",
     "underscore": "^1.8.3",
     "uniq": "^1.0.1"
   }

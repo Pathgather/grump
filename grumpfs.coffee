@@ -89,7 +89,7 @@ GrumpFS = (root, grump) ->
   # add logging to all non overridden fs methods
   logArguments = (func) ->
     return ->
-      console.log "grump.fs: passing through to", func, arguments...
+      console.log "grump.fs: passthrough".gray, func.gray, arguments...
       return fs[func](arguments...)
 
   for func of require("fs")

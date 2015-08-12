@@ -22,7 +22,7 @@ logRead = (err, src) ->
   if err
     logError(err)
   else
-    console.log "src", src.toString()
+    console.log "src", src.toString().substring(0,100).gray
 
 asyncBench = (message = "", fn) ->
   start = process.hrtime()
@@ -42,7 +42,7 @@ logError = (error) ->
   if error.stack
     console.log "error".red, error.stack
   else
-    console.log "error".red, error.toString()
+    console.log "error".red, error.toString().substring(0,100)
 
 # grump.fs.readFile "src/hello.js?bundle", encoding: "utf8", (err, src) ->
 #   if err
@@ -59,7 +59,7 @@ logError = (error) ->
 #     grump.fs.readFile "src/hello.html", encoding: "utf8", ->
 #   , 2000
 grump.fs.readFile("data/hello.js?bundle", logRead)
-grump.fs.readFile("data/templates.js", logRead)
+# grump.fs.readFile("data/templates.js", logRead)
 # fn = -> grump.fs.readFile("src/templates.js", asyncBench("fetcheroo", ->))
 # setInterval(fn, 1000)
 

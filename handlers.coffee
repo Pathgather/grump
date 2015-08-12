@@ -4,7 +4,6 @@ path = require("path")
 concat = require('concat-stream')
 coffee = require("coffee-script")
 through = require('through2')
-proxyquire = require('proxyquire')
 
 # run all handlers until one of them resolves to a value
 AnyHandler = (handlers...) ->
@@ -91,12 +90,9 @@ BrowserifyHandler = (options = {}) ->
   browserify = null
 
   initBrowserify = _.once (grump) ->
-    browserify = proxyquire("browserify",
-      fs: grump.fs
-      resolve: proxyquire("browserify/node_modules/resolve",
-        "./lib/async": proxyquire("browserify/node_modules/resolve/lib/async", fs: grump.fs))
-      "browser-resolve": proxyquire("browserify/node_modules/browser-resolve", fs: grump.fs)
-      "module-deps": proxyquire("browserify/node_modules/module-deps", fs: grump.fs))
+    require.cache["fs"] = { id: "fs", exports: grump.fs }
+    browserify = require("browserify")
+    delete require.cache.fs
 
   cache = {}
   fileCache = {}
@@ -120,8 +116,6 @@ BrowserifyHandler = (options = {}) ->
 
     new Promise (resolve, reject) ->
 
-      # bundle.reset()
-
       bundle.pipeline.get("deps").push through.obj (row, enc, next) ->
         # this is for module-deps
         file = row.expose && bundle._expose[row.id] || row.file
@@ -132,12 +126,9 @@ BrowserifyHandler = (options = {}) ->
         this.push(row)
         next()
 
-      fileStream = grump.fs.createReadStream(targetFile)
-      fileStream.file = targetFile
-
       bundle
         .on("error", -> console.log "browserify error", arguments)
-        .add(fileStream)
+        .add(targetFile)
         .bundle (err, body) ->
           console.log "bundle complete"
 
