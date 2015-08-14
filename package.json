@@ -2,7 +2,7 @@
   "name": "grump.js",
   "version": "0.0.1",
   "description": "File builder for web era",
-  "main": "example.coffee",
+  "main": "grump.coffee",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

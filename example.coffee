@@ -6,16 +6,16 @@ util = require("./util")
 grump = new Grump
   root: "./data"
   routes:
-    "**/templates.js": handlers.GulpHandler
+    "**/templates.js": Grump.GulpHandler
       files: ["data/hello.html"]
       transform: ->
         angularTemplates
           basePath: "/"
           module: "Pathgather"
-    "**/*.js?bundle": handlers.BrowserifyHandler(grump)
-    "**/*.js": handlers.AnyHandler(handlers.CoffeeHandler(), handlers.StaticHandler())
-    "**/*.html": handlers.HamlHandler()
-    "**": handlers.StaticHandler()
+    "**/*.js?bundle": Grump.BrowserifyHandler(grump)
+    "**/*.js": Grump.AnyHandler(Grump.CoffeeHandler(), Grump.StaticHandler())
+    "**/*.html": Grump.HamlHandler()
+    "**": Grump.StaticHandler()
 
 # grump.fs.readFile "src/hello.js?bundle", encoding: "utf8", (err, src) ->
 #   if err

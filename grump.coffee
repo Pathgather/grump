@@ -8,6 +8,7 @@ prettyHrtime = require('pretty-hrtime')
 GrumpFS = require("./grumpfs")
 GrumpCache = require("./grump_cache")
 util = require("./util")
+handlers = require("./handlers")
 
 normalizePath = (filename) -> path.resolve(filename)
 
@@ -113,3 +114,6 @@ module.exports = class Grump
           response.end((error.stack || error).toString())
 
     http.createServer(handler).listen(options.port)
+
+# handlers to the Grump object
+_.extend(Grump, handlers)
