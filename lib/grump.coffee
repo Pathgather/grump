@@ -6,6 +6,7 @@ minimatch = require("minimatch")
 prettyHrtime = require('pretty-hrtime')
 
 GrumpCache = require("./grump_cache")
+GrumpFS = require("./grumpfs")
 util = require("./util")
 handlers = require("./handlers")
 
@@ -13,9 +14,17 @@ normalizePath = (filename) ->
 
 module.exports = class Grump
   constructor: (config) ->
+    if not (@ instanceof Grump)
+      return new Grump(config)
+
     @root = fs.realpathSync(config.root || ".")
     @routes = config.routes || {}
     @cache = new GrumpCache()
+
+    @fs = new GrumpFS(@root, @)
+
+  # Object.defineProperty @prototype, "fs",
+  #   get: -> "hello"
 
   getUncached: (filename, cache_entry) ->
     handler = @findHandler(filename)

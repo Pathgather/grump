@@ -2,9 +2,9 @@
   "name": "grump.js",
   "version": "0.0.1",
   "description": "File builder for web era",
-  "main": "grump.coffee",
+  "main": "lib/grump.coffee",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "coffee jasmine.coffee"
   },
   "author": "Guntars Asmanis-Graham <guntars@pathgather.com>",
   "license": "ISC",
@@ -16,5 +16,9 @@
     "pretty-hrtime": "^1.0.0",
     "underscore": "^1.8.3",
     "uniq": "^1.0.1"
+  },
+  "devDependencies": {
+    "jasmine": "^2.3.2",
+    "proxyquire": "^1.7.0"
   }
 }
