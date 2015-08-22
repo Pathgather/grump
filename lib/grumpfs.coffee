@@ -1,6 +1,7 @@
 # _ = require("underscore")
 fs = require("fs")
-# path = require("path")
+path = require("path")
+Sync = require('sync')
 # stream = require("stream")
 # colors = require('colors')
 
@@ -23,13 +24,34 @@ fs = require("fs")
 #   isDirectory: ReturnTrue
 #   isFIFO: ReturnFalse
 
+throwNextTick = (err) ->
+  process.nextTick -> throw err
+
+startsWith = (str, needle) ->
+  str.substring(0, needle.length) == needle
+
 class GrumpFS
-  constructor: (@_root, @_grump) ->
+  constructor: (@_grump) ->
+
+  _grumpGet: (filename, cb) ->
+    onResult = (result) -> cb(null, result)
+    @_grump.get(filename)
+      .then(onResult, cb)
+      .catch(throwNextTick)
+
+    return
 
   readFile: (filename, cb) =>
-    @_grump.get(filename)
-      .then (file) -> cb(null, file)
-      .catch (err) -> cb(err)
+    if not path.isAbsolute(filename) or filename.indexOf("../") >= 0
+      absFilename = path.resolve(@_grump.root, filename)
+
+    if startsWith(absFilename || filename, @_grump.root)
+      @_grumpGet(filename, cb)
+    else
+      fs.readFile(arguments...)
+
+  readFileSync: (filename) =>
+    @readFile.sync(null, filename)
 
 # GrumpFS = (root, grump) ->
 #   grumpfs = {
