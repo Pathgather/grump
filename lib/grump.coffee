@@ -26,7 +26,24 @@ module.exports = class Grump
   # Object.defineProperty @prototype, "fs",
   #   get: -> "hello"
 
-  getUncached: (filename, cache_entry) ->
+  get: (filename) ->
+    filename = path.resolve(filename)
+
+    if cache_entry = @cache.get(filename)
+      result = cache_entry.result
+
+      if cache_entry.rejected == null
+        console.log "cache hit for".green, "promise".yellow, filename
+        return result
+      else if @cache.isCurrent(filename)
+        if cache_entry.rejected == false
+          console.log "cache hit for".green, filename
+          return Promise.resolve(result)
+        else # assume it's an error
+          console.log "cache hit for".green, "error".red, filename
+          return Promise.reject(result)
+
+    cache_entry = @cache.init(filename)
     handler = @findHandler(filename)
 
     if not handler
@@ -34,16 +51,20 @@ module.exports = class Grump
 
     console.log "running handler for #{filename}".yellow
 
-    # wrap grump into something that records the calls to "get" to
-    # build the dependency graph.
-    old_get = @getNormalized
-    grump = _.extend Object.create(@),
-      get: (_filename) ->
-        _filename = path.resolve(_filename)
-        cache_entry.deps.push(_filename)
-        old_get(_filename)
+    # create a new grump with attached cache_entry.
+    bind = (parent) ->
+      grump = Object.create(parent)
+      grump._parent_entry = cache_entry
+      grump
 
-    promise = grump.run(handler, filename)
+    # if we have one attached here, record the dependency
+    if @hasOwnProperty("_parent_entry")
+      @_parent_entry.deps.push(filename)
+      grump = bind(@__proto__)
+    else
+      grump = bind(@)
+
+    cache_entry.result = promise = grump.run(handler, filename)
 
     # if handler has an mtime function, we store the current time on the
     # cache_entry and the mtime functon to later compare if the underlying
@@ -53,37 +74,17 @@ module.exports = class Grump
       updateEntry = -> cache_entry.at = new Date()
       promise.then(updateEntry, updateEntry)
 
+    promise
+      .then (result) ->
+        console.log "cache save for", filename
+        cache_entry.rejected = false
+        cache_entry.result = result
+      .catch (error) ->
+        console.log "cache save for " + "error".red, filename
+        cache_entry.rejected = true
+        cache_entry.result = error
+
     return promise
-
-  getNormalized: (filename) =>
-    if cache_entry = @cache.get(filename)
-      result = cache_entry.result
-
-      if typeof result.then == "function"
-        console.log "cache hit for".green, "promise".yellow, filename
-        return result
-      else if @cache.isCurrent(filename)
-        if result instanceof Buffer or typeof result == "string"
-          console.log "cache hit for".green, filename
-          return Promise.resolve(result)
-        else # assume it's an error
-          console.log "cache hit for".green, "error".red, filename
-          return Promise.reject(result)
-
-    cache_entry = @cache.init(filename)
-
-    _.tap @getUncached(filename, cache_entry), (promise) ->
-      cache_entry.result = promise
-      promise
-        .then (result) ->
-          console.log "cache save for", filename
-          cache_entry.result = result
-        .catch (error) ->
-          console.log "cache save for " + "error".red, filename
-          cache_entry.result = error
-
-  get: (filename) =>
-    @getNormalized(path.resolve(filename))
 
   findHandler: (filename) ->
     if filename.indexOf(@root) == 0

@@ -3,7 +3,7 @@ _ = require("underscore")
 module.exports = class GrumpCache
   constructor: -> @_cache = {}
   get: (key) -> @_cache[key]
-  init: (key) -> @_cache[key] = {deps: [], result: null}
+  init: (key) -> @_cache[key] = {id: key, deps: [], result: null, rejected: null}
 
   # an entry is current (not stale) if:
   # a) all deps are in cache and current
