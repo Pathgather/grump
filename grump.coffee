@@ -5,50 +5,46 @@ http = require("http")
 minimatch = require("minimatch")
 prettyHrtime = require('pretty-hrtime')
 
-GrumpFS = require("./grumpfs")
 GrumpCache = require("./grump_cache")
 util = require("./util")
 handlers = require("./handlers")
 
-normalizePath = (filename) -> path.resolve(filename)
+normalizePath = (filename) ->
 
 module.exports = class Grump
   constructor: (config) ->
     @root = fs.realpathSync(config.root || ".")
     @routes = config.routes || {}
     @cache = new GrumpCache()
-    @fs = new GrumpFS(@root, @)
 
   getUncached: (filename, cache_entry) ->
-    if handler = @findHandler(filename)
-      console.log "running handler for #{filename}".yellow
+    handler = @findHandler(filename)
 
-      # wrap grump into something that records the calls to "get" to
-      # build the dependency graph.
-      old_get = @getNormalized
-      grump = _.extend Object.create(@),
-        get: (_filename) ->
-          _filename = normalizePath(_filename)
-          cache_entry.deps.push(_filename)
-          old_get(_filename)
+    if not handler
+      return Promise.reject(new Error("file not found: #{filename}"))
 
-      promise = Promise.resolve(handler(filename, grump))
+    console.log "running handler for #{filename}".yellow
 
-      # if handler has an mtime function, we store the current time on the
-      # cache_entry and the mtime functon to later compare if the underlying
-      # files have been updated.
-      if handler.mtime
-        cache_entry.mtime = _.partial(handler.mtime, filename)
-        updateEntry = (result) ->
-          cache_entry.at = new Date()
-          return result
+    # wrap grump into something that records the calls to "get" to
+    # build the dependency graph.
+    old_get = @getNormalized
+    grump = _.extend Object.create(@),
+      get: (_filename) ->
+        _filename = path.resolve(_filename)
+        cache_entry.deps.push(_filename)
+        old_get(_filename)
 
-        promise.then(updateEntry, updateEntry)
+    promise = grump.run(handler, filename)
 
-      return promise
+    # if handler has an mtime function, we store the current time on the
+    # cache_entry and the mtime functon to later compare if the underlying
+    # files have been updated.
+    if handler.mtime
+      cache_entry.mtime = _.partial(handler.mtime, filename)
+      updateEntry = -> cache_entry.at = new Date()
+      promise.then(updateEntry, updateEntry)
 
-    else
-      Promise.reject(new GrumpFS.NotFoundError(filename))
+    return promise
 
   getNormalized: (filename) =>
     if cache_entry = @cache.get(filename)
@@ -78,13 +74,21 @@ module.exports = class Grump
           cache_entry.result = error
 
   get: (filename) =>
-    @getNormalized(normalizePath(filename))
+    @getNormalized(path.resolve(filename))
 
   findHandler: (filename) ->
+    if filename.indexOf(@root) == 0
+      filename = filename.substring(@root.length)
+
     for route, handler of @routes
       if minimatch(filename, route)
         return handler
+
     return null
+
+  run: (handler, filename) ->
+    Promise.resolve(null).then =>
+      handler(filename, @)
 
   serve: (options = {}) ->
     if not options.port
@@ -106,7 +110,8 @@ module.exports = class Grump
           response.writeHead(200, {})
           response.end(result)
 
-          console.log @cache
+          # console.log @cache
+
         .catch (error) ->
           util.logError(error)
 

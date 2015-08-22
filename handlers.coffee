@@ -37,36 +37,43 @@ GulpHandler = (options = {}) ->
   if typeof options.transform != "function"
     throw new Error("GulpHandler: transform option to be a function that returns a transform stream")
 
-  if not _.isArray(options.files) or options.files.length == 0
-    throw new Error("GulpHandler: required files option missing")
+  if options.base
+    file_opts = {base: options.base}
 
   return (file, grump) ->
     new Promise (resolve, reject) ->
 
-      transform = options.transform()
-      transform.on("error", reject)
+      if typeof options.files == "function"
+        files = options.files(file)
+      else if _.isArray(options.files)
+        files = options.files
+      else
+        throw new Error("GulpHandler: missing files option")
 
-      pipe_in = new stream.Readable(objectMode: true)
-      pipe_in._read = ->
+      Promise.resolve(files).then (files) ->
 
-      pipe_in
-        .pipe(transform)
-        .pipe concat (files) ->
-          # join all vinyl files together to resolve the promise
-          buffers = files.map (file) -> file.contents
-          resolve(Buffer.concat(buffers).toString())
+        transform = options.transform(file)
+        transform.on("error", reject)
 
-      promises = _.map options.files, (filename) ->
-        _.tap grump.get(filename), (promise) ->
-          promise.then (result) ->
-            pipe_in.push(
-              new File(
-                path: filename
-                contents: new Buffer(result)))
+        pipe_in = new stream.Readable(objectMode: true)
+        pipe_in._read = ->
 
-      Promise.all(promises)
-        .then -> pipe_in.push(null)
-        .catch(reject)
+        pipe_in
+          .pipe(transform)
+          .pipe concat (files) ->
+            # join all vinyl files together to resolve the promise
+            buffers = files.map (file) -> file.contents
+            resolve(Buffer.concat(buffers).toString())
+
+        promises = _.map files, (filename) ->
+          grump.get(filename).then (result) ->
+            pipe_in.push(new File(_.extend(file_opts, path: filename, contents: new Buffer(result))))
+
+        Promise.all(promises)
+          .then -> pipe_in.push(null)
+          .catch(reject)
+
+      return
 
 HamlHandler = (options = {}) ->
   hamlc = require('haml-coffee')

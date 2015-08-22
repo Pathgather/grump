@@ -45,9 +45,10 @@ GrumpFS = (root, grump) ->
         callback = options
         options = null
 
-      grump.get(filename)
-        .then (result) -> callback(null, result)
-        .catch (error) -> callback(error, null)
+      onResult = _.partial(callback, null, _)
+      onError = _.partial(callback, _, null)
+
+      grump.get(filename).then(onResult, onError)
 
     realpath: (filename, cache, callback) ->
       console.log ("realpath " + filename).gray
@@ -62,21 +63,23 @@ GrumpFS = (root, grump) ->
 
     stat: (filename, callback) ->
       console.log ("stat " + filename).gray
-      grump.get(filename)
-        .then (result) ->
-          callback(null, FileStat(result))
-        .catch (error) ->
-          if error.code == "EISDIR"
-            callback(null, DirStat())
-          else
-            callback(error, null)
+
+      onResult = (result) -> callback(null, FileStat(result))
+      onError = (error) ->
+        if error.code == "EISDIR"
+          callback(null, DirStat())
+        else
+          callback(error, null)
+
+      grump.get(filename).then(onResult, onError)
+
   }
 
   # only run the functions above if the path is in the root
   checkRootFilename = (fn, fallback_fn) ->
     return (filename) ->
       if not path.isAbsolute(filename) or filename.indexOf("../") >= 0
-        filename = path.resolve(filename)
+        filename = path.resolve(grump.root, filename)
 
       if filename.substring(0, root.length) == root
         fn(arguments...)
