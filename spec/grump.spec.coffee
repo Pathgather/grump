@@ -19,7 +19,6 @@ describe "Grump", ->
           grump.get("hello").then (result) ->
             "dep: #{result}"
         when "hello_as_dep_as_dep"
-          console.log "cache entry", grump._cache_entry?
           grump.get("hello_as_dep").then (result) ->
             "dep: #{result}"
 
@@ -100,8 +99,9 @@ describe "Grump", ->
 
       it "should contain an entry with deps after a nested get", (done) ->
         grump.get("hello_as_dep_as_dep")
-          .then (result) =>
+          .then (result) ->
             entry = getEntry("hello_as_dep_as_dep")
+            expect(entry.result).toBe(result)
             expect(entry.result).toBe("dep: dep: contents")
             expect(entry.deps.length).toBe(1)
             entry2 = getEntry(entry.deps[0])

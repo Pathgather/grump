@@ -12,7 +12,7 @@ handlers = require("./handlers")
 
 normalizePath = (filename) ->
 
-module.exports = class Grump
+class Grump
   constructor: (config) ->
     if not (@ instanceof Grump)
       return new Grump(config)
@@ -47,44 +47,45 @@ module.exports = class Grump
     handler = @findHandler(filename)
 
     if not handler
-      return Promise.reject(new Error("file not found: #{filename}"))
+      promise = Promise.reject(new Error("file not found: #{filename}"))
+      return @_resolveCacheEntry(promise, cache_entry, filename)
 
     console.log "running handler for #{filename}".yellow
 
-    # create a new grump with attached cache_entry.
-    bind = (parent) ->
-      grump = Object.create(parent)
-      grump._parent_entry = cache_entry
-      grump
-
+    # create a new grump with attached cache_entry and
     # if we have one attached here, record the dependency
     if @hasOwnProperty("_parent_entry")
       @_parent_entry.deps.push(filename)
-      grump = bind(@__proto__)
+      grump = Object.create(@__proto__)
     else
-      grump = bind(@)
+      grump = Object.create(@)
 
+    grump._parent_entry = cache_entry
     cache_entry.result = promise = grump.run(handler, filename)
 
     # if handler has an mtime function, we store the current time on the
     # cache_entry and the mtime functon to later compare if the underlying
     # files have been updated.
     if handler.mtime
-      cache_entry.mtime = _.partial(handler.mtime, filename)
+      cache_entry.mtime = (name) -> handler.mtime(name)
       updateEntry = -> cache_entry.at = new Date()
       promise.then(updateEntry, updateEntry)
 
-    promise
-      .then (result) ->
-        console.log "cache save for", filename
-        cache_entry.rejected = false
-        cache_entry.result = result
-      .catch (error) ->
-        console.log "cache save for " + "error".red, filename
-        cache_entry.rejected = true
-        cache_entry.result = error
+    return @_resolveCacheEntry(promise, cache_entry, filename)
 
-    return promise
+  _resolveCacheEntry: (promise, cache_entry, filename) ->
+    onResult = (result) ->
+      console.log "cache save for", filename
+      cache_entry.rejected = false
+      cache_entry.result = result
+
+    onError = (error) ->
+      console.log "cache save for " + "error".red, filename
+      cache_entry.rejected = true
+      cache_entry.result = error
+
+    promise.then(onResult, onError)
+    return promise # return the original promise
 
   findHandler: (filename) ->
     if filename.indexOf(@root) == 0
@@ -132,3 +133,5 @@ module.exports = class Grump
 
 # handlers to the Grump object
 _.extend(Grump, handlers)
+
+module.exports = Grump
