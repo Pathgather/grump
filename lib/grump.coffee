@@ -21,10 +21,8 @@ class Grump
     @routes = config.routes || {}
     @cache = new GrumpCache()
 
-    @fs = new GrumpFS(@root, @)
-
-  # Object.defineProperty @prototype, "fs",
-  #   get: -> "hello"
+  fs: ->
+    new GrumpFS(@root, @)
 
   get: (filename) ->
     filename = path.resolve(filename)
@@ -56,7 +54,7 @@ class Grump
     # if we have one attached here, record the dependency
     if @hasOwnProperty("_parent_entry")
       @_parent_entry.deps.push(filename)
-      grump = Object.create(@__proto__)
+      grump = Object.create(Object.getPrototypeOf(@))
     else
       grump = Object.create(@)
 
@@ -99,7 +97,7 @@ class Grump
 
   run: (handler, filename) ->
     Promise.resolve(null).then =>
-      handler(filename, @)
+      handler(filename: filename, grump: @)
 
   serve: (options = {}) ->
     if not options.port

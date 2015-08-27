@@ -9,7 +9,7 @@ describe "Grump", ->
   handler = null
 
   beforeEach ->
-    handler = jasmine.createSpy("handler").and.callFake (filename, grump) ->
+    handler = jasmine.createSpy("handler").and.callFake ({filename, grump}) ->
       switch path.basename(filename)
         when "hello"
           "contents"
@@ -46,7 +46,7 @@ describe "Grump", ->
     it "should call the handler", (done) ->
       grump.get("hello")
         .then (result) ->
-          expect(handler).toHaveBeenCalledWith(path.resolve("hello"), jasmine.any(Grump))
+          expect(handler).toHaveBeenCalledWith({filename: path.resolve("hello"), grump: jasmine.any(Grump)})
           done()
         .catch(fail)
 

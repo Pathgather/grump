@@ -8,12 +8,12 @@ util = require("./util")
 
 # run all handlers until one of them resolves to a value
 AnyHandler = (handlers...) ->
-  return (file, grump) ->
+  return ({file, grump}) ->
     idx = 0
 
     catchHandler = (error) ->
       if handlers[idx]
-        result = handlers[idx](file, grump)
+        result = handlers[idx]({file, grump})
         Promise.resolve(result)
           .catch (error) ->
             idx += 1
@@ -25,7 +25,7 @@ AnyHandler = (handlers...) ->
     catchHandler()
 
 CoffeeHandler = (options = {}) ->
-  return (file, grump) ->
+  return ({file, grump}) ->
     file = file.replace(/\.js$/, ".coffee")
     grump.get(file).then (source) ->
       coffee.compile(source, options)
@@ -40,7 +40,7 @@ GulpHandler = (options = {}) ->
   if options.base
     file_opts = {base: options.base}
 
-  return (file, grump) ->
+  return ({file, grump}) ->
     new Promise (resolve, reject) ->
 
       if typeof options.files == "function"
@@ -77,7 +77,7 @@ GulpHandler = (options = {}) ->
 
 HamlHandler = (options = {}) ->
   hamlc = require('haml-coffee')
-  return (file, grump) ->
+  return ({file, grump}) ->
     htmlfile = file.replace(".html", ".haml")
     grump.get(htmlfile)
       .then (source) ->
@@ -108,19 +108,19 @@ BrowserifyHandler = (options = {}) ->
 
   count = 0
 
-  return (targetFile, grump) ->
+  return ({filename, grump}) ->
 
     initBrowserify(grump)
 
-    console.log "bundle requested for", targetFile
+    console.log "bundle requested for", filename
     count += 1
-    targetFile = targetFile.replace(/\?bundle$/, "")
+    filename = filename.replace(/\?bundle$/, "")
 
     options.cache = cache
     options.fileCache = fileCache
     options.packageCache = packageCache
 
-    bundle = browserify([], _.extend(options, basedir: path.dirname(targetFile)))
+    bundle = browserify([], _.extend(options, basedir: path.dirname(filename)))
 
     new Promise (resolve, reject) ->
 
@@ -136,7 +136,7 @@ BrowserifyHandler = (options = {}) ->
 
       bundle
         .on("error", -> console.log "browserify error", arguments)
-        .add(targetFile)
+        .add(filename)
         .bundle (err, body) ->
           console.log "bundle complete"
 
