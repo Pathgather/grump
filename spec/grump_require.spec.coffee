@@ -58,3 +58,16 @@ describe "Grump#require", ->
     hello2 = new Grump().require("./support/hello.js", module)
 
     expect(hello.dep.Hello).toBe(hello2.dep.Hello)
+
+  it "should route all fs calls to grump.get", (done) ->
+    handler = jasmine.createSpy("handler").and.returnValue("content")
+    grump = new Grump
+      routes:
+        "**": handler
+
+    hello = grump.require("./support/hello", module)
+    hello.dep.reverse "my_file", (err, result) ->
+      expect(err).toBe(null)
+      expect(handler).toHaveBeenCalled()
+      expect(result).toBe("tnetnoc")
+      done()

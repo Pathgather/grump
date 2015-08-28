@@ -22,8 +22,14 @@ class Grump
   require: require("./grump_require")
   serve: require("./grump_serve")
 
-  fs: ->
-    new GrumpFS(@)
+  Object.defineProperties @prototype,
+    fs:
+      get: ->
+        if @hasOwnProperty("_fs")
+          @_fs
+        else
+          @_fs ||= new GrumpFS(@)
+      set: (@_fs) ->
 
   get: (filename) ->
     filename = path.resolve(filename)
@@ -103,4 +109,5 @@ class Grump
 # handlers to the Grump object
 _.extend(Grump, handlers)
 
+Grump.GrumpFS = GrumpFS
 module.exports = Grump

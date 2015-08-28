@@ -50,6 +50,16 @@ class GrumpFS
   readFileSync: (filename) =>
     @readFile.sync(null, filename)
 
+# a helper class that wraps node's fs and simply logs all calls
+GrumpFS.LoggingFS = Object.create(fs)
+
+for func of fs
+  if typeof fs[func] == "function"
+    do (func) ->
+      GrumpFS.LoggingFS[func] = ->
+        console.log func.yellow, arguments[0]
+        fs[func](arguments...)
+
 # GrumpFS = (root, grump) ->
 #   grumpfs = {
 #     createReadStream: (filename, options) ->

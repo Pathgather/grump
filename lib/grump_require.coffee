@@ -51,7 +51,7 @@ module.exports = (name, module) ->
 
   require.cache.fs =
     id: "fs"
-    exports: @fs()
+    exports: @fs
 
   ret = module.require(name)
   delete require.cache.fs
