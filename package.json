@@ -12,6 +12,7 @@
     "browserify": "^11.0.0",
     "coffee-script": "^1.9.3",
     "concat-stream": "^1.5.0",
+    "detective": "^4.2.0",
     "minimatch": "^2.0.8",
     "pretty-hrtime": "^1.0.0",
     "sync": "^0.2.5",

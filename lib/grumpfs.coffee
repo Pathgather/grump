@@ -24,9 +24,6 @@ Sync = require('sync')
 #   isDirectory: ReturnTrue
 #   isFIFO: ReturnFalse
 
-throwNextTick = (err) ->
-  process.nextTick -> throw err
-
 startsWith = (str, needle) ->
   str.substring(0, needle.length) == needle
 
@@ -35,9 +32,9 @@ class GrumpFS
 
   _grumpGet: (filename, cb) ->
     onResult = (result) -> cb(null, result)
+
     @_grump.get(filename)
       .then(onResult, cb)
-      .catch(throwNextTick)
 
     return
 

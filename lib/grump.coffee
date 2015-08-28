@@ -1,9 +1,7 @@
 _ = require("underscore")
 fs = require("fs")
 path = require("path")
-http = require("http")
 minimatch = require("minimatch")
-prettyHrtime = require('pretty-hrtime')
 
 GrumpCache = require("./grump_cache")
 GrumpFS = require("./grumpfs")
@@ -13,7 +11,7 @@ handlers = require("./handlers")
 normalizePath = (filename) ->
 
 class Grump
-  constructor: (config) ->
+  constructor: (config = {}) ->
     if not (@ instanceof Grump)
       return new Grump(config)
 
@@ -21,8 +19,11 @@ class Grump
     @routes = config.routes || {}
     @cache = new GrumpCache()
 
+  require: require("./grump_require")
+  serve: require("./grump_serve")
+
   fs: ->
-    new GrumpFS(@root, @)
+    new GrumpFS(@)
 
   get: (filename) ->
     filename = path.resolve(filename)
@@ -98,36 +99,6 @@ class Grump
   run: (handler, filename) ->
     Promise.resolve(null).then =>
       handler(filename: filename, grump: @)
-
-  serve: (options = {}) ->
-    if not options.port
-      throw new Error("Grump: missing port option")
-
-    logRequest = (request, response) ->
-      start = process.hrtime()
-      response.on "finish", ->
-        process.stdout.write("#{request.method} #{request.url} - ")
-        time = process.hrtime(start)
-        console.log("Completed", response.statusCode, "in", prettyHrtime(time))
-
-
-    handler = (request, response) =>
-      logRequest(request, response)
-
-      @get(@root + request.url)
-        .then (result) =>
-          response.writeHead(200, {})
-          response.end(result)
-
-          # console.log @cache
-
-        .catch (error) ->
-          util.logError(error)
-
-          response.writeHead(500, {})
-          response.end((error.stack || error).toString())
-
-    http.createServer(handler).listen(options.port)
 
 # handlers to the Grump object
 _.extend(Grump, handlers)

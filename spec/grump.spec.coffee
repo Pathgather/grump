@@ -29,7 +29,6 @@ describe "Grump", ->
 
     grump = new Grump(options)
 
-
   it "should be a function", ->
     expect(typeof Grump).toBe("function")
 
@@ -38,6 +37,9 @@ describe "Grump", ->
 
   it "with new should return grump instance", ->
     expect(new Grump(options)).toEqual(jasmine.any(Grump))
+
+  it "should initialize without any options", ->
+    expect(-> new Grump()).not.toThrow()
 
   describe "get()", ->
     beforeEach ->
