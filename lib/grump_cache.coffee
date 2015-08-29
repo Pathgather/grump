@@ -16,7 +16,7 @@ module.exports = class GrumpCache
     return false if not _.every(deps_current)
 
     if entry.mtime
-      mtime = entry.mtime()
+      mtime = entry.mtime(key)
 
       if not entry.at?
         throw new Error("GrumpCache: possibly pending file tested for isCurrent: #{key}")

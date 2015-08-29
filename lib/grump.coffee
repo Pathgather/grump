@@ -1,12 +1,13 @@
-_ = require("underscore")
-fs = require("fs")
-path = require("path")
+_         = require("underscore")
+fs        = require("fs")
 minimatch = require("minimatch")
+path      = require("path")
+Sync      = require("sync")
+util      = require("./util")
 
 GrumpCache = require("./grump_cache")
-GrumpFS = require("./grumpfs")
-util = require("./util")
-handlers = require("./handlers")
+GrumpFS    = require("./grumpfs")
+handlers   = require("./handlers")
 
 normalizePath = (filename) ->
 
@@ -72,11 +73,15 @@ class Grump
     # cache_entry and the mtime functon to later compare if the underlying
     # files have been updated.
     if handler.mtime
-      cache_entry.mtime = (name) -> handler.mtime(name)
+      cache_entry.mtime = handler.mtime
       updateEntry = -> cache_entry.at = new Date()
       promise.then(updateEntry, updateEntry)
 
     return @_resolveCacheEntry(promise, cache_entry, filename)
+
+  getSync: (filename) ->
+    promise = @get(filename)
+    util.syncPromise(promise)
 
   _resolveCacheEntry: (promise, cache_entry, filename) ->
     onResult = (result) ->
