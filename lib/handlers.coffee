@@ -38,12 +38,6 @@ GulpHandler = (options = {}) ->
   if typeof options.transform != "function"
     throw new Error("GulpHandler: transform option to be a function that returns a transform stream")
 
-  if options.base
-    file_opts = {base: options.base}
-
-  _File = (opts) ->
-    new File(_.extend(file_opts, opts))
-
   return (ctx) ->
     new Promise (resolve, reject) ->
       Sync ->
@@ -55,7 +49,7 @@ GulpHandler = (options = {}) ->
           else
             throw new Error("GulpHandler: missing files option")
 
-          transform = options.transform(ctx)
+          transform = util.syncPromise(options.transform(ctx))
           transform.on("error", reject)
 
           pipe_in = new stream.Readable(objectMode: true)
@@ -70,7 +64,9 @@ GulpHandler = (options = {}) ->
 
           for filename in files
             result = ctx.grump.getSync(filename)
-            file = new _File
+
+            file = new File
+              base: options.base
               path: filename
               contents: new Buffer(result)
 
