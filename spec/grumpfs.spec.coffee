@@ -76,7 +76,7 @@ describe "Grump.fs", ->
   describe "readFileSync", ->
     it "should throw an error when called outside Sync()", ->
       fn = -> fs.readFileSync("hello")
-      expect(fn).toThrowError(/no fiber/)
+      expect(fn).toThrowError(/not in a fiber/)
 
     it "should return contents", (done) ->
       inSync fail, ->

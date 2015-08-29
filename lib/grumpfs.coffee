@@ -38,16 +38,40 @@ class GrumpFS
 
     return
 
-  readFile: (filename, cb) =>
+  _isRooted: (filename) ->
     if not path.isAbsolute(filename) or filename.indexOf("../") >= 0
       absFilename = path.resolve(@_grump.root, filename)
 
-    if startsWith(absFilename || filename, @_grump.root)
+    return startsWith(absFilename || filename, @_grump.root)
+
+  _assertInFiber: ->
+    if not Sync.Fibers.current
+      throw new Error("GrumpFS: tried to use a *Sync function while not in a fiber")
+
+    console.log "GrumpFS#_assertInFiber: running in a fiber id = ".cyan, Sync.Fibers.current.id
+
+  exists: (filename, cb) =>
+    if @_isRooted(filename)
+      @_grump.get(filename)
+        .then ->
+          process.nextTick -> cb(null, true)
+        .catch ->
+          process.nextTick -> cb(null, false)
+    else
+      fs.exists(arguments...)
+
+  existsSync: (filename) =>
+    @_assertInFiber()
+    @exists.sync(null, filename)
+
+  readFile: (filename, cb) =>
+    if @_isRooted(filename)
       @_grumpGet(filename, cb)
     else
       fs.readFile(arguments...)
 
   readFileSync: (filename) =>
+    @_assertInFiber()
     @readFile.sync(null, filename)
 
 # a helper class that wraps node's fs and simply logs all calls
@@ -57,8 +81,12 @@ for func of fs
   if typeof fs[func] == "function"
     do (func) ->
       GrumpFS.LoggingFS[func] = ->
-        console.log func.yellow, arguments[0]
+        console.log func.green, arguments[0]
         fs[func](arguments...)
+
+# extend GrumpFS with the logging functions for the time being
+for name, fn of GrumpFS.LoggingFS
+  GrumpFS.prototype[name] ||= fn
 
 # GrumpFS = (root, grump) ->
 #   grumpfs = {
