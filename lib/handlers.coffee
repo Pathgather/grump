@@ -1,10 +1,11 @@
-_ = require("underscore")
-fs = require("fs")
-path = require("path")
-concat = require('concat-stream')
-coffee = require("coffee-script")
+_       = require("underscore")
+fs      = require("fs")
+path    = require("path")
+concat  = require('concat-stream')
+coffee  = require("coffee-script")
 through = require('through2')
-util = require("./util")
+util    = require("./util")
+Sync    = require("sync")
 
 # run all handlers until one of them resolves to a value
 AnyHandler = (handlers...) ->
@@ -40,53 +41,60 @@ GulpHandler = (options = {}) ->
   if options.base
     file_opts = {base: options.base}
 
-  return ({file, grump}) ->
+  _File = (opts) ->
+    new File(_.extend(file_opts, opts))
+
+  return (ctx) ->
     new Promise (resolve, reject) ->
+      Sync ->
+        try
+          if typeof options.files == "function"
+            files = util.syncPromise(options.files(ctx))
+          else if _.isArray(options.files)
+            files = options.files
+          else
+            throw new Error("GulpHandler: missing files option")
 
-      if typeof options.files == "function"
-        files = options.files(file)
-      else if _.isArray(options.files)
-        files = options.files
-      else
-        throw new Error("GulpHandler: missing files option")
+          transform = options.transform(ctx)
+          transform.on("error", reject)
 
-      Promise.resolve(files).then (files) ->
+          pipe_in = new stream.Readable(objectMode: true)
+          pipe_in._read = ->
 
-        transform = options.transform(file)
-        transform.on("error", reject)
+          pipe_in
+            .pipe(transform)
+            .pipe concat (files) ->
+              # join all vinyl files together to resolve the promise
+              buffers = files.map (file) -> file.contents
+              resolve(Buffer.concat(buffers).toString())
 
-        pipe_in = new stream.Readable(objectMode: true)
-        pipe_in._read = ->
+          for filename in files
+            result = ctx.grump.getSync(filename)
+            file = new _File
+              path: filename
+              contents: new Buffer(result)
 
-        pipe_in
-          .pipe(transform)
-          .pipe concat (files) ->
-            # join all vinyl files together to resolve the promise
-            buffers = files.map (file) -> file.contents
-            resolve(Buffer.concat(buffers).toString())
+            pipe_in.push(file)
 
-        promises = _.map files, (filename) ->
-          grump.get(filename).then (result) ->
-            pipe_in.push(new File(_.extend(file_opts, path: filename, contents: new Buffer(result))))
+          # we're done
+          pipe_in.push(null)
 
-        Promise.all(promises)
-          .then -> pipe_in.push(null)
-          .catch(reject)
+        catch err
+          reject(err)
 
-      return
 
 HamlHandler = (options = {}) ->
   hamlc = require('haml-coffee')
-  return ({file, grump}) ->
-    htmlfile = file.replace(".html", ".haml")
+  return ({filename, grump}) ->
+    htmlfile = filename.replace(".html", ".haml")
     grump.get(htmlfile)
       .then (source) ->
         hamlc.render(source)
 
 StaticHandler = ->
-  fn = (file) ->
+  fn = ({filename}) ->
     new Promise (resolve, reject) ->
-      fs.readFile file, {encoding: "utf8"}, (err, result) ->
+      fs.readFile filename, {encoding: "utf8"}, (err, result) ->
         err && reject(err) || resolve(result)
 
   fn.mtime = (file) ->
