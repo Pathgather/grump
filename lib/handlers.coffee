@@ -9,12 +9,12 @@ Sync    = require("sync")
 
 # run all handlers until one of them resolves to a value
 AnyHandler = (handlers...) ->
-  return ({file, grump}) ->
+  return ({filename, grump}) ->
     idx = 0
 
     catchHandler = (error) ->
       if handlers[idx]
-        result = handlers[idx]({file, grump})
+        result = handlers[idx]({filename, grump})
         Promise.resolve(result)
           .catch (error) ->
             idx += 1
@@ -26,9 +26,9 @@ AnyHandler = (handlers...) ->
     catchHandler()
 
 CoffeeHandler = (options = {}) ->
-  return ({file, grump}) ->
-    file = file.replace(/\.js$/, ".coffee")
-    grump.get(file).then (source) ->
+  return ({filename, grump}) ->
+    filename = filename.replace(/\.js(\?.*)?$/, ".coffee")
+    grump.get(filename).then (source) ->
       coffee.compile(source, options)
 
 GulpHandler = (options = {}) ->
@@ -40,43 +40,42 @@ GulpHandler = (options = {}) ->
 
   return (ctx) ->
     new Promise (resolve, reject) ->
-      Sync ->
-        try
-          if typeof options.files == "function"
-            files = util.syncPromise(options.files(ctx))
-          else if _.isArray(options.files)
-            files = options.files
-          else
-            throw new Error("GulpHandler: missing files option")
+      try
+        if typeof options.files == "function"
+          files = util.syncPromise(options.files(ctx))
+        else if _.isArray(options.files)
+          files = options.files
+        else
+          files = [ctx.filename]
 
-          transform = util.syncPromise(options.transform(ctx))
-          transform.on("error", reject)
+        transform = util.syncPromise(options.transform(ctx))
+        transform.on("error", reject)
 
-          pipe_in = new stream.Readable(objectMode: true)
-          pipe_in._read = ->
+        pipe_in = new stream.Readable(objectMode: true)
+        pipe_in._read = ->
 
-          pipe_in
-            .pipe(transform)
-            .pipe concat (files) ->
-              # join all vinyl files together to resolve the promise
-              buffers = files.map (file) -> file.contents
-              resolve(Buffer.concat(buffers).toString())
+        pipe_in
+          .pipe(transform)
+          .pipe concat (files) ->
+            # join all vinyl files together to resolve the promise
+            buffers = files.map (file) -> file.contents
+            resolve(Buffer.concat(buffers).toString())
 
-          for filename in files
-            result = ctx.grump.getSync(filename)
+        for filename in files
+          result = ctx.grump.getSync(filename)
 
-            file = new File
-              base: options.base
-              path: filename
-              contents: new Buffer(result)
+          file = new File
+            base: options.base
+            path: filename
+            contents: new Buffer(result)
 
-            pipe_in.push(file)
+          pipe_in.push(file)
 
-          # we're done
-          pipe_in.push(null)
+        # we're done
+        pipe_in.push(null)
 
-        catch err
-          reject(err)
+      catch err
+        reject(err)
 
 
 HamlHandler = (options = {}) ->
@@ -99,60 +98,44 @@ StaticHandler = ->
   return fn
 
 BrowserifyHandler = (options = {}) ->
-  browserify = null
+  options = _.extend {}, options,
+    cache: {} # shared between all bundles
+    fileCache: {}
+    packageCache: {}
 
-  initBrowserify = _.once (grump) ->
-    require.cache["fs"] = { id: "fs", exports: grump.fs }
-    browserify = require("browserify")
-    delete require.cache.fs
+  expired = (key, entry) ->
+    console.log "expired".red, key
+    delete options.cache[key]
 
-  cache = {}
-  fileCache = {}
-  packageCache = {}
-
-  count = 0
-
-  return ({filename, grump}) ->
-
-    initBrowserify(grump)
-
-    console.log "bundle requested for", filename
-    count += 1
-    filename = filename.replace(/\?bundle$/, "")
-
-    options.cache = cache
-    options.fileCache = fileCache
-    options.packageCache = packageCache
-
-    bundle = browserify([], _.extend(options, basedir: path.dirname(filename)))
+  return (ctx) ->
+    if expired not in ctx.grump.cache.listeners("expired")
+      ctx.grump.cache.on("expired", expired)
 
     new Promise (resolve, reject) ->
 
+      if typeof options.files == "function"
+        files = util.syncPromise(options.files(ctx))
+      else if _.isArray(options.files)
+        files = options.files
+      else
+        files = [ctx.filename]
+
+      browserify = ctx.grump.require("browserify", module)
+      bundle = browserify([], options)
+
       bundle.pipeline.get("deps").push through.obj (row, enc, next) ->
-        # this is for module-deps
         file = row.expose && bundle._expose[row.id] || row.file
-        cache[file] =
+        options.cache[file] =
             source: row.source,
             deps: _.extend({}, row.deps)
 
         this.push(row)
+        ctx.grump.dep(file) # save the dependency in grump
         next()
 
       bundle
-        .on("error", -> console.log "browserify error", arguments)
-        .add(filename)
+        .add(files)
         .bundle (err, body) ->
-          console.log "bundle complete"
-
-          if count == 2
-
-            console.log "cache", cache
-            console.log "fileCache", fileCache
-            console.log "packageCache", packageCache
-
-          if err
-            reject(err)
-          else
-            resolve(body.toString())
+          err && reject(err) || resolve(body)
 
 module.exports = {AnyHandler, CoffeeHandler, GulpHandler, HamlHandler, StaticHandler, BrowserifyHandler}

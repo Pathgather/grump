@@ -25,7 +25,7 @@ describe "Grump.fs", ->
 
   beforeEach ->
     fakefs =
-      readFile: jasmine.createSpy("readFile").and.callFake (filename, cb) -> files[filename](cb)
+      readFile: jasmine.createSpy("readFile").and.callFake (filename, opts, cb) -> files[filename](cb || opts)
 
     grump =
       root: path.resolve()

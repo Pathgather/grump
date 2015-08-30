@@ -16,6 +16,7 @@ class Grump
     if not (@ instanceof Grump)
       return new Grump(config)
 
+    @minimatch_opts = config.minimatch || {}
     @root = fs.realpathSync(config.root || ".")
     @routes = config.routes || {}
     @cache = new GrumpCache()
@@ -32,6 +33,16 @@ class Grump
           @_fs ||= new GrumpFS(@)
       set: (@_fs) ->
 
+  # add filename as a dependency for the current request
+  dep: (filename) ->
+    if not @_parent_entry
+      throw new Error("Grump: dep() called with #{filename}, but no cache entry attached")
+
+    if not @cache.get(filename)
+      @get(filename)
+    else
+      @_parent_entry.deps.push(filename)
+
   get: (filename) ->
     filename = path.resolve(filename)
 
@@ -41,7 +52,7 @@ class Grump
       if cache_entry.rejected == null
         console.log "cache hit for".green, "promise".yellow, filename
         return result
-      else if @cache.isCurrent(filename)
+      else if @cache.current(filename)
         if cache_entry.rejected == false
           console.log "cache hit for".green, filename
           return Promise.resolve(result)
@@ -80,6 +91,11 @@ class Grump
     return @_resolveCacheEntry(promise, cache_entry, filename)
 
   getSync: (filename) ->
+    if not Sync.Fibers.current
+      throw new Error("Grump: tried to use a *Sync function while not in a fiber")
+
+    console.log "Grump#_assertInFiber: running in a fiber id = ".cyan, Sync.Fibers.current.id
+
     promise = @get(filename)
     util.syncPromise(promise)
 
@@ -102,14 +118,19 @@ class Grump
       filename = filename.substring(@root.length)
 
     for route, handler of @routes
-      if minimatch(filename, route)
+      if minimatch(filename, route, @minimatch_opts)
         return handler
 
     return null
 
   run: (handler, filename) ->
-    Promise.resolve(null).then =>
-      handler(filename: filename, grump: @)
+    grump = @
+    new Promise (resolve, reject) ->
+      Sync ->
+        try
+          resolve(handler({filename, grump}))
+        catch err
+          reject(err)
 
 # handlers to the Grump object
 _.extend(Grump, handlers)

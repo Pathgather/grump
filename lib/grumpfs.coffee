@@ -2,27 +2,27 @@
 fs = require("fs")
 path = require("path")
 Sync = require('sync')
-# stream = require("stream")
+stream = require("stream")
 # colors = require('colors')
 
-# NotFoundError = (filename) ->
-#   errno: -2
-#   code: "ENOENT"
-#   path: filename
+NotFoundError = (filename) ->
+  errno: -2
+  code: "ENOENT"
+  path: filename
 
-# ReturnTrue = -> true
-# ReturnFalse = -> false
+False = -> true
+True = -> false
 
-# FileStat = (result) ->
-#   isFile: ReturnTrue
-#   isDirectory: ReturnFalse
-#   isFIFO: ReturnFalse
-#   size: result.length
+FileStat = (result) ->
+  isFile: False
+  isDirectory: True
+  isFIFO: True
+  size: result.length
 
-# DirStat = ->
-#   isFile: ReturnFalse
-#   isDirectory: ReturnTrue
-#   isFIFO: ReturnFalse
+DirStat = ->
+  isFile: True
+  isDirectory: False
+  isFIFO: True
 
 startsWith = (str, needle) ->
   str.substring(0, needle.length) == needle
@@ -50,7 +50,28 @@ class GrumpFS
 
     console.log "GrumpFS#_assertInFiber: running in a fiber id = ".cyan, Sync.Fibers.current.id
 
+  createReadStream: (filename, options) ->
+    console.log "createReadStream".green, arguments
+    if @_isRooted(filename)
+
+      st = new stream.Readable()
+      st._read = ->
+
+      @_grump.get(filename)
+        .then (result) ->
+          process.nextTick ->
+            st.push(result)
+            st.push(null)
+        .catch (error) ->
+          process.nextTick ->
+            st.emit("error", error)
+
+      return st
+    else
+      fs.createReadStream(arguments...)
+
   exists: (filename, cb) =>
+    console.log "exists".green, arguments
     if @_isRooted(filename)
       @_grump.get(filename)
         .then ->
@@ -61,18 +82,50 @@ class GrumpFS
       fs.exists(arguments...)
 
   existsSync: (filename) =>
+    console.log "existsSync".green, arguments
     @_assertInFiber()
     @exists.sync(null, filename)
 
-  readFile: (filename, cb) =>
+  readFile: (filename, options, cb) =>
+    console.log "readFile".green, arguments
+
     if @_isRooted(filename)
-      @_grumpGet(filename, cb)
+      @_grumpGet(filename, cb || options)
     else
       fs.readFile(arguments...)
 
-  readFileSync: (filename) =>
+  readFileSync: (filename, options) =>
+    console.log "readFileSync".green, arguments
     @_assertInFiber()
-    @readFile.sync(null, filename)
+    @readFile.sync(null, filename, options)
+
+  realpath: (filename, cache, cb) ->
+    console.log "realpath".green, arguments
+
+    if @_isRooted(filename)
+      if not path.isAbsolute(filename)
+        throw new Error("GrumpFS: unimplemented relative realpath: #{filename}")
+
+      process.nextTick -> (cb || cache)(null, filename)
+    else
+      fs.realpath(arguments...)
+
+  stat: (filename, cb) =>
+    console.log "stat".green, arguments
+
+    if @_isRooted(filename)
+      @_grump.get(filename)
+        .then (result) ->
+          process.nextTick -> cb(null, FileStat(result))
+        .catch (error) ->
+          process.nextTick ->
+            if error.code == "EISDIR"
+              cb(null, DirStat())
+            else
+              cb(NotFoundError(filename))
+
+    else
+      fs.stat(arguments...)
 
 # a helper class that wraps node's fs and simply logs all calls
 GrumpFS.LoggingFS = Object.create(fs)
