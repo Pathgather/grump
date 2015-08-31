@@ -82,5 +82,6 @@ describe "GulpHandler", ->
       @grump.get("gulp")
         .then(fail)
         .catch (err) ->
-          expect(err).toEqual({CODE: "trouble in paradise", i: 1})
-          done()
+          process.nextTick ->
+            expect(err).toEqual(jasmine.objectContaining({CODE: "trouble in paradise", i: 1}))
+            done()

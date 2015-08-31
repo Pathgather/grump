@@ -110,6 +110,10 @@ class Grump
       cache_entry.rejected = true
       cache_entry.result = error
 
+      # attach a filename info the the error
+      if not error._grump_filename
+        error._grump_filename = filename
+
     promise.then(onResult, onError)
     return promise # return the original promise
 

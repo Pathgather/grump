@@ -14,7 +14,9 @@ describe "Grump", ->
         when "hello"
           "contents"
         when "hello_error"
-          Promise.reject("my error")
+          Promise.reject(message: "my error")
+        when "hello_error_as_dep"
+          grump.get("hello_error")
         when "hello_as_dep"
           grump.get("hello").then (result) ->
             "dep: #{result}"
@@ -68,7 +70,7 @@ describe "Grump", ->
     it "should reject when there's an error", (done) ->
       grump.get("hello_error")
         .catch (error) ->
-          expect(error).toBe("my error")
+          expect(error).toEqual(jasmine.objectContaining(message: "my error"))
           done()
 
     it "should cache the handler error", (done) ->
@@ -83,6 +85,15 @@ describe "Grump", ->
       promise  = grump.get("hello")
       promise2 = grump.get("hello")
       expect(promise).toBe(promise2)
+
+    it "should decorate the error with the filename", (done) ->
+      grump.get("hello_error_as_dep")
+        .then(fail)
+        .catch (err) ->
+          file = err._grump_filename
+          expect(file).toBeDefined()
+          expect(path.basename(file)).toBe("hello_error")
+          done()
 
     describe "deps", ->
       getEntry = (name) ->

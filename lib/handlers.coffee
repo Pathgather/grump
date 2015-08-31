@@ -29,7 +29,7 @@ CoffeeHandler = (options = {}) ->
   return ({filename, grump}) ->
     filename = filename.replace(/\.js(\?.*)?$/, ".coffee")
     grump.get(filename).then (source) ->
-      coffee.compile(source, options)
+      coffee.compile(source, _.extend({}, options, {filename}))
 
 GulpHandler = (options = {}) ->
   File = require("vinyl")
@@ -84,7 +84,13 @@ HamlHandler = (options = {}) ->
     htmlfile = filename.replace(".html", ".haml")
     grump.get(htmlfile)
       .then (source) ->
-        hamlc.render(source)
+        try
+          hamlc.render(source)
+        catch err
+          if typeof err == "string"
+            err = new Error(err)
+
+          Promise.reject(err)
 
 StaticHandler = ->
   fn = ({filename}) ->
@@ -136,6 +142,16 @@ BrowserifyHandler = (options = {}) ->
       bundle
         .add(files)
         .bundle (err, body) ->
+          if err
+            # try to extract the actual error from grump cache
+            if match = err.message?.match(/Cannot find module '(.*?)' from '(.*?)'/)
+              file = path.resolve(match[2], match[1])
+              for ext in ["", "/", ".js", ".json", ".coffee", "/"]
+                if entry = ctx.grump.cache.get(file + ext)
+                  if entry.rejected and entry.result?.code != "ENOENT"
+                    err.message += "\n\n" + (entry.result.stack || entry.result.message || entry.result)
+                    break
+
           err && reject(err) || resolve(body)
 
 module.exports = {AnyHandler, CoffeeHandler, GulpHandler, HamlHandler, StaticHandler, BrowserifyHandler}

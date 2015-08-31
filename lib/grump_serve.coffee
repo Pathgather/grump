@@ -2,6 +2,7 @@ http         = require("http")
 prettyHrtime = require('pretty-hrtime')
 util         = require("./util")
 Sync         = require("sync")
+stripAnsi    = require('strip-ansi')
 
 # Exposed as Grump#serve method, this method starts a web server that serves
 # grump request as well as pretty prints the errors.
@@ -31,10 +32,17 @@ module.exports = (options = {}) ->
         util.logError(error)
 
         result = (error.stack || error).toString()
+
+        if error._grump_filename
+          result = "Grump: error while bulding #{error._grump_filename}\n\n" + result
+
+        result = stripAnsi(result)
+
         code = 500
+        headers = "Content-Type": "text/plain"
 
       finally
-        response.writeHead(code, {})
+        response.writeHead(code, headers || {})
         response.end(result)
 
   http.createServer(handler).listen(options.port)
