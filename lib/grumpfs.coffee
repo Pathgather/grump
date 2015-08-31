@@ -1,9 +1,9 @@
 # _ = require("underscore")
+chalk = require("chalk")
 fs = require("fs")
 path = require("path")
 Sync = require('sync')
 stream = require("stream")
-# colors = require('colors')
 
 NotFoundError = (filename) ->
   errno: -2
@@ -48,10 +48,10 @@ class GrumpFS
     if not Sync.Fibers.current
       throw new Error("GrumpFS: tried to use a *Sync function while not in a fiber")
 
-    console.log "GrumpFS#_assertInFiber: running in a fiber id = ".cyan, Sync.Fibers.current.id
+    console.log chalk.cyan("GrumpFS#_assertInFiber: running in a fiber id = "), Sync.Fibers.current.id
 
   createReadStream: (filename, options) ->
-    console.log "createReadStream".green, arguments
+    console.log chalk.gray("createReadStream"), arguments
     if @_isRooted(filename)
 
       st = new stream.Readable()
@@ -71,7 +71,7 @@ class GrumpFS
       fs.createReadStream(arguments...)
 
   exists: (filename, cb) =>
-    console.log "exists".green, arguments
+    console.log chalk.gray("exists"), arguments
     if @_isRooted(filename)
       @_grump.get(filename)
         .then ->
@@ -82,12 +82,12 @@ class GrumpFS
       fs.exists(arguments...)
 
   existsSync: (filename) =>
-    console.log "existsSync".green, arguments
+    console.log chalk.gray("existsSync"), arguments
     @_assertInFiber()
     @exists.sync(null, filename)
 
   readFile: (filename, options, cb) =>
-    console.log "readFile".green, arguments
+    console.log chalk.gray("readFile"), arguments
 
     if @_isRooted(filename)
       @_grumpGet(filename, cb || options)
@@ -95,12 +95,12 @@ class GrumpFS
       fs.readFile(arguments...)
 
   readFileSync: (filename, options) =>
-    console.log "readFileSync".green, arguments
+    console.log chalk.gray("readFileSync"), arguments
     @_assertInFiber()
     @readFile.sync(null, filename, options)
 
   realpath: (filename, cache, cb) ->
-    console.log "realpath".green, arguments
+    console.log chalk.gray("realpath"), arguments
 
     if @_isRooted(filename)
       if not path.isAbsolute(filename)
@@ -111,7 +111,7 @@ class GrumpFS
       fs.realpath(arguments...)
 
   stat: (filename, cb) =>
-    console.log "stat".green, arguments
+    console.log chalk.gray("stat"), arguments
 
     if @_isRooted(filename)
       @_grump.get(filename)
@@ -134,7 +134,7 @@ for func of fs
   if typeof fs[func] == "function"
     do (func) ->
       GrumpFS.LoggingFS[func] = ->
-        console.log func.green, arguments[0]
+        console.log func, arguments[0]
         fs[func](arguments...)
 
 # extend GrumpFS with the logging functions for the time being
@@ -144,7 +144,7 @@ for name, fn of GrumpFS.LoggingFS
 # GrumpFS = (root, grump) ->
 #   grumpfs = {
 #     createReadStream: (filename, options) ->
-#       console.log ("createReadStream " + filename).gray
+#       console.log ("createReadStream " + filename)
 
 #       st = new stream.Readable()
 #       st._read = ->
@@ -158,7 +158,7 @@ for name, fn of GrumpFS.LoggingFS
 #       return st
 
 #     readFile: (filename, options, callback) ->
-#       console.log ("readFile " + filename).gray
+#       console.log ("readFile " + filename)
 #       if typeof options == "function"
 #         callback = options
 #         options = null
@@ -169,7 +169,7 @@ for name, fn of GrumpFS.LoggingFS
 #       grump.get(filename).then(onResult, onError)
 
 #     realpath: (filename, cache, callback) ->
-#       console.log ("realpath " + filename).gray
+#       console.log ("realpath " + filename)
 
 #       if typeof cache == "function"
 #         callback = cache
@@ -180,7 +180,7 @@ for name, fn of GrumpFS.LoggingFS
 #       callback(null, filename)
 
 #     stat: (filename, callback) ->
-#       console.log ("stat " + filename).gray
+#       console.log ("stat " + filename)
 
 #       onResult = (result) -> callback(null, FileStat(result))
 #       onError = (error) ->
@@ -210,7 +210,7 @@ for name, fn of GrumpFS.LoggingFS
 #   # add logging to all non overridden fs methods
 #   logArguments = (func) ->
 #     return ->
-#       console.log "grump.fs: passthrough".gray, func.gray, arguments...
+#       console.log "grump.fs: passthrough", func, arguments...
 #       return fs[func](arguments...)
 
 #   for func of require("fs")

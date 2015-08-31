@@ -1,4 +1,5 @@
 _       = require("underscore")
+chalk   = require("chalk")
 fs      = require("fs")
 path    = require("path")
 concat  = require('concat-stream')
@@ -110,7 +111,7 @@ BrowserifyHandler = (options = {}) ->
     packageCache: {}
 
   expired = (key, entry) ->
-    console.log "expired".red, key
+    console.log chalk.red("expired"), key
     delete options.cache[key]
 
   return (ctx) ->
