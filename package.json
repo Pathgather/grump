@@ -1,7 +1,7 @@
 {
-  "name": "grump.js",
-  "version": "0.0.1",
-  "description": "File builder for web era",
+  "name": "grump",
+  "version": "0.1.0",
+  "description": "The laziest file builder of them all.",
   "main": "lib/grump.coffee",
   "scripts": {
     "test": "coffee jasmine.coffee"
