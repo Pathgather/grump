@@ -1,5 +1,3 @@
-require("es6-promise").polyfill()
-
 _         = require("underscore")
 chalk     = require("chalk")
 fs        = require("fs")
