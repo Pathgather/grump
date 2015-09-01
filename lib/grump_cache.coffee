@@ -15,13 +15,20 @@ module.exports = class GrumpCache extends events.EventEmitter
 
   # an entry is current (not stale) if:
   # a) all deps are in cache and current
-  # b) it has an at prop AND mtime prop and mtime() is less than at
-  current: (key) =>
+  # b) it is older than it's parent
+  # c) it has an at prop AND mtime prop and mtime() is less than at
+  current: (key, parent_at = null) =>
     entry = @get(key)
     return false if not entry
 
-    deps_current = _.map(entry.deps, @current)
-    return @_expire(key, entry) if not _.every(deps_current)
+    if parent_at and entry.at > parent_at
+      return @_expire(key, entry)
+
+    deps_current = _.map entry.deps, (dep) =>
+      @current(dep, entry.at)
+
+    if not _.every(deps_current)
+      return @_expire(key, entry)
 
     if entry.mtime
       mtime = entry.mtime(key)

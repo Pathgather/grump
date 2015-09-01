@@ -94,37 +94,3 @@ describe "Grump", ->
           expect(file).toBeDefined()
           expect(path.basename(file)).toBe("hello_error")
           done()
-
-    describe "deps", ->
-      getEntry = (name) ->
-        grump.cache.get(path.resolve(name))
-
-      beforeEach ->
-        expect(grump.cache._cache).toBeEmpty()
-
-      it "should contain an entry after a get", (done) ->
-        grump.get("hello").then (result) =>
-          expect(grump.cache._cache).not.toBeEmpty()
-          entry = getEntry("hello")
-          expect(entry.result).toBe(result)
-          expect(entry.deps).toEqual([])
-          done()
-
-      it "should contain an entry with deps after a nested get", (done) ->
-        grump.get("hello_as_dep_as_dep")
-          .then (result) ->
-            entry = getEntry("hello_as_dep_as_dep")
-            expect(entry.result).toBe(result)
-            expect(entry.rejected).toBe(false)
-            expect(entry.result).toBe("dep: dep: contents")
-            expect(entry.deps.length).toBe(1)
-            entry2 = getEntry(entry.deps[0])
-            expect(entry2.rejected).toBe(false)
-            expect(entry2.result).toBe("dep: contents")
-            expect(entry2.deps.length).toBe(1)
-            entry3 = getEntry(entry2.deps[0])
-            expect(entry3.rejected).toBe(false)
-            expect(entry3.result).toBe("contents")
-            expect(entry3.deps.length).toBe(0)
-            done()
-          .catch(fail)
