@@ -140,5 +140,6 @@ class Grump
 # handlers to the Grump object
 _.extend(Grump, handlers)
 
-Grump.GrumpFS = GrumpFS
+Grump.GrumpFS  = GrumpFS
+Grump.Sync     = Sync
 module.exports = Grump
