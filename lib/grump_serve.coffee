@@ -38,7 +38,7 @@ module.exports = (options = {}) ->
 
         result = stripAnsi(result)
 
-        code = 500
+        code = if error.code == "ENOENT" then 404 else 500
         headers = "Content-Type": "text/plain"
 
       finally
