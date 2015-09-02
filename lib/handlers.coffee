@@ -99,10 +99,12 @@ StaticHandler = ->
       fs.readFile filename, {encoding: "utf8"}, (err, result) ->
         err && reject(err) || resolve(result)
 
-  fn.mtime = (file) ->
-    try fs.statSync(file).mtime
+  fn.mtime = StaticHandler.mtime
 
   return fn
+
+StaticHandler.mtime = (file) ->
+  try fs.statSync(file).mtime
 
 BrowserifyHandler = (options = {}) ->
   options = _.extend {}, options,
@@ -153,6 +155,6 @@ BrowserifyHandler = (options = {}) ->
                     err.message += "\n\n" + (entry.result.stack || entry.result.message || entry.result)
                     break
 
-          err && reject(err) || resolve(body)
+          if err then reject(err) else resolve(body)
 
 module.exports = {AnyHandler, CoffeeHandler, GulpHandler, HamlHandler, StaticHandler, BrowserifyHandler}

@@ -5,6 +5,8 @@ path = require("path")
 Sync = require('sync')
 stream = require("stream")
 
+debug = false
+
 NotFoundError = (filename) ->
   errno: -2
   code: "ENOENT"
@@ -48,10 +50,8 @@ class GrumpFS
     if not Sync.Fibers.current
       throw new Error("GrumpFS: tried to use a *Sync function while not in a fiber")
 
-    console.log chalk.cyan("GrumpFS#_assertInFiber: running in a fiber id = "), Sync.Fibers.current.id
-
   createReadStream: (filename, options) ->
-    console.log chalk.gray("createReadStream"), arguments
+    console.log chalk.gray("createReadStream"), arguments if debug
     if @_isRooted(filename)
 
       st = new stream.Readable()
@@ -71,7 +71,7 @@ class GrumpFS
       fs.createReadStream(arguments...)
 
   exists: (filename, cb) =>
-    console.log chalk.gray("exists"), arguments
+    console.log chalk.gray("exists"), arguments if debug
     if @_isRooted(filename)
       @_grump.get(filename)
         .then ->
@@ -82,12 +82,12 @@ class GrumpFS
       fs.exists(arguments...)
 
   existsSync: (filename) =>
-    console.log chalk.gray("existsSync"), arguments
+    console.log chalk.gray("existsSync"), arguments if debug
     @_assertInFiber()
     @exists.sync(null, filename)
 
   readFile: (filename, options, cb) =>
-    console.log chalk.gray("readFile"), arguments
+    console.log chalk.gray("readFile"), arguments if debug
 
     if @_isRooted(filename)
       @_grumpGet(filename, cb || options)
@@ -95,12 +95,12 @@ class GrumpFS
       fs.readFile(arguments...)
 
   readFileSync: (filename, options) =>
-    console.log chalk.gray("readFileSync"), arguments
+    console.log chalk.gray("readFileSync"), arguments if debug
     @_assertInFiber()
     @readFile.sync(null, filename, options)
 
   realpath: (filename, cache, cb) ->
-    console.log chalk.gray("realpath"), arguments
+    console.log chalk.gray("realpath"), arguments if debug
 
     if @_isRooted(filename)
       if not path.isAbsolute(filename)
@@ -111,7 +111,7 @@ class GrumpFS
       fs.realpath(arguments...)
 
   stat: (filename, cb) =>
-    console.log chalk.gray("stat"), arguments
+    console.log chalk.gray("stat"), arguments if debug
 
     if @_isRooted(filename)
       @_grump.get(filename)
@@ -134,7 +134,7 @@ for func of fs
   if typeof fs[func] == "function"
     do (func) ->
       GrumpFS.LoggingFS[func] = ->
-        console.log func, arguments[0]
+        console.log func, arguments[0] if debug
         fs[func](arguments...)
 
 # extend GrumpFS with the logging functions for the time being
@@ -144,7 +144,7 @@ for name, fn of GrumpFS.LoggingFS
 # GrumpFS = (root, grump) ->
 #   grumpfs = {
 #     createReadStream: (filename, options) ->
-#       console.log ("createReadStream " + filename)
+#       console.log ("createReadStream " + filename) if debug
 
 #       st = new stream.Readable()
 #       st._read = ->
@@ -158,7 +158,7 @@ for name, fn of GrumpFS.LoggingFS
 #       return st
 
 #     readFile: (filename, options, callback) ->
-#       console.log ("readFile " + filename)
+#       console.log ("readFile " + filename) if debug
 #       if typeof options == "function"
 #         callback = options
 #         options = null
@@ -169,7 +169,7 @@ for name, fn of GrumpFS.LoggingFS
 #       grump.get(filename).then(onResult, onError)
 
 #     realpath: (filename, cache, callback) ->
-#       console.log ("realpath " + filename)
+#       console.log ("realpath " + filename) if debug
 
 #       if typeof cache == "function"
 #         callback = cache
@@ -180,7 +180,7 @@ for name, fn of GrumpFS.LoggingFS
 #       callback(null, filename)
 
 #     stat: (filename, callback) ->
-#       console.log ("stat " + filename)
+#       console.log ("stat " + filename) if debug
 
 #       onResult = (result) -> callback(null, FileStat(result))
 #       onError = (error) ->
@@ -210,7 +210,7 @@ for name, fn of GrumpFS.LoggingFS
 #   # add logging to all non overridden fs methods
 #   logArguments = (func) ->
 #     return ->
-#       console.log "grump.fs: passthrough", func, arguments...
+#       console.log "grump.fs: passthrough", func, arguments... if debug
 #       return fs[func](arguments...)
 
 #   for func of require("fs")

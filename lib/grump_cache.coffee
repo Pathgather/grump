@@ -6,7 +6,7 @@ module.exports = class GrumpCache extends events.EventEmitter
     super
     @_cache = {}
   get: (key) -> @_cache[key]
-  init: (key) -> @_cache[key] = {id: key, deps: [], result: null, rejected: null}
+  init: (key) -> @_cache[key] = {id: key, deps: {}, result: null, rejected: null}
 
   _expire: (key, entry) ->
     delete @_cache[key]
@@ -24,7 +24,7 @@ module.exports = class GrumpCache extends events.EventEmitter
     if parent_at and entry.at > parent_at
       return @_expire(key, entry)
 
-    deps_current = _.map entry.deps, (dep) =>
+    deps_current = _.map _.keys(entry.deps), (dep) =>
       @current(dep, entry.at)
 
     if not _.every(deps_current)

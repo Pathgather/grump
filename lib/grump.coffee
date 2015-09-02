@@ -39,21 +39,26 @@ class Grump
     if not @_parent_entry
       throw new Error("Grump: dep() called with #{filename}, but no cache entry attached")
 
+    filename = path.resolve(filename)
+
+    # if there isn't a cache entry for this filename, create one assuming it's a real file
     if not @cache.get(filename)
-      @get(filename)
-    else
-      @_parent_entry.deps.push(filename)
+      cache_entry = @cache.init(filename)
+      cache_entry.mtime = Grump.StaticHandler.mtime
+      cache_entry.at = new Date()
+
+    @_parent_entry.deps[filename] = true
 
   get: (filename) ->
     filename = path.resolve(filename)
 
     if @hasOwnProperty("_parent_entry")
-      @_parent_entry.deps.push(filename)
+      @_parent_entry.deps[filename] = true
 
     if cache_entry = @cache.get(filename)
       result = cache_entry.result
 
-      if cache_entry.rejected == null
+      if cache_entry.rejected == null and typeof result == "object"
         console.log chalk.green("cache hit for"), chalk.yellow("promise"), filename
         return result
       else if @cache.current(filename)
@@ -67,32 +72,30 @@ class Grump
     cache_entry = @cache.init(filename)
     handler = @findHandler(filename)
 
-    if not handler
-      promise = Promise.reject(new Error("file not found: #{filename}"))
-      return @_resolveCacheEntry(promise, cache_entry, filename)
+    if handler
+      console.log chalk.yellow("running handler for #{filename}")
 
-    console.log chalk.yellow("running handler for #{filename}")
+      # create a new grump with attached cache_entry
+      if @hasOwnProperty("_parent_entry")
+        grump = Object.create(Object.getPrototypeOf(@))
+      else
+        grump = Object.create(@)
 
-    # create a new grump with attached cache_entry
-    if @hasOwnProperty("_parent_entry")
-      grump = Object.create(Object.getPrototypeOf(@))
+      grump._parent_entry = cache_entry
+      promise = grump.run(handler, filename)
+
+      # if handler has an mtime function, we store the mtime functon to
+      # later compare if the underlying files have been updated.
+      cache_entry.mtime = handler.mtime if handler.mtime
+
     else
-      grump = Object.create(@)
-
-    grump._parent_entry = cache_entry
-    cache_entry.result = promise = grump.run(handler, filename)
-
-    # if handler has an mtime function, we store the mtime functon to
-    # later compare if the underlying files have been updated.
-    cache_entry.mtime = handler.mtime if handler.mtime
+      promise = Promise.reject(new Error("file not found: #{filename}"))
 
     return @_resolveCacheEntry(promise, cache_entry, filename)
 
   getSync: (filename) ->
     if not Sync.Fibers.current
       throw new Error("Grump: tried to use a *Sync function while not in a fiber")
-
-    console.log chalk.cyan("Grump#_assertInFiber: running in a fiber id = "), Sync.Fibers.current.id
 
     promise = @get(filename)
     util.syncPromise(promise)
@@ -114,8 +117,11 @@ class Grump
       if not error._grump_filename
         error._grump_filename = filename
 
-    promise.then(onResult, onError)
-    return promise # return the original promise
+      return Promise.reject(error)
+
+    # we want the cache entry to be updated before the caller
+    # gets the resolved result, so we return a new promise here.
+    return cache_entry.result = promise.then(onResult, onError)
 
   findHandler: (filename) ->
     if filename.indexOf(@root) == 0
