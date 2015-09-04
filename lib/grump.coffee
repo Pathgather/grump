@@ -10,7 +10,34 @@ GrumpCache = require("./grump_cache")
 GrumpFS    = require("./grumpfs")
 handlers   = require("./handlers")
 
-normalizePath = (filename) ->
+tryStatic = (filename, cache_entry, options = {}) ->
+  cache_entry.mtime = Grump.mtime
+  new Promise (resolve, reject) ->
+    fs.readFile filename, options, (err, result) ->
+      if err then reject(err) else resolve(result)
+
+resolveCacheEntry = (promise, cache_entry, filename) ->
+  ok = (result) ->
+    console.log chalk.gray("cache save for"), filename
+    cache_entry.at = new Date()
+    cache_entry.rejected = false
+    cache_entry.result = result
+
+  fail = (error) ->
+    console.log chalk.red("cache save for " + "error"), filename
+    cache_entry.at = new Date()
+    cache_entry.rejected = true
+    cache_entry.result = error
+
+    # attach a filename info the the error
+    if not error._grump_filename
+      error._grump_filename = filename
+
+    return Promise.reject(error)
+
+  # we want the cache entry to be updated before the caller
+  # gets the resolved result, so we return a new promise here.
+  return cache_entry.result = promise.then(ok, fail)
 
 class Grump
   constructor: (config = {}) ->
@@ -19,7 +46,19 @@ class Grump
 
     @minimatch_opts = config.minimatch || {}
     @root = fs.realpathSync(config.root || ".")
-    @routes = config.routes || {}
+
+    @routes = {}
+    for route, handler of config.routes || {}
+      handler = if typeof handler == "function"
+        {handler}
+      else
+        _.extend(handler)
+
+      if handler.tryStatic == true
+        handler.tryStatic = "before"
+
+      @routes[path.resolve(@root, route)] = handler
+
     @cache = new GrumpCache()
 
   require: require("./grump_require")
@@ -44,8 +83,8 @@ class Grump
     # if there isn't a cache entry for this filename, create one assuming it's a real file
     if not @cache.get(filename)
       cache_entry = @cache.init(filename)
-      cache_entry.mtime = Grump.StaticHandler.mtime
-      cache_entry.at = new Date()
+      cache_entry.mtime = Grump.mtime
+      cache_entry.at = cache_entry.mtime(filename) || new Date()
 
     @_parent_entry.deps[filename] = true
 
@@ -70,28 +109,42 @@ class Grump
           return Promise.reject(result)
 
     cache_entry = @cache.init(filename)
-    handler = @findHandler(filename)
 
-    if handler
-      console.log chalk.yellow("running handler for #{filename}")
+    for route of @routes
+      if minimatch(filename, route, @minimatch_opts)
+        handler = @routes[route]
+        break
 
-      # create a new grump with attached cache_entry
-      if @hasOwnProperty("_parent_entry")
-        grump = Object.create(Object.getPrototypeOf(@))
+    promise = if handler
+      tryHandler = =>
+        console.log chalk.yellow("running handler for #{filename}")
+
+        # create a new grump with attached cache_entry
+        if @hasOwnProperty("_parent_entry")
+          grump = Object.create(Object.getPrototypeOf(@))
+        else
+          grump = Object.create(@)
+
+        grump._parent_entry = cache_entry
+        return grump.run(handler.handler, filename)
+
+      if handler.tryStatic == "before"
+        # try reading the file from the file system and only try the handler
+        # if that fails
+        tryStatic(filename, cache_entry).catch(tryHandler)
+      else if handler.tryStatic == "after"
+        # try handler first and then the fs if that fails. return the original
+        # error from the handler, though.
+        tryHandler().catch (error) ->
+          tryStatic(filename, cache_entry).catch ->
+            Promise.reject(error)
       else
-        grump = Object.create(@)
-
-      grump._parent_entry = cache_entry
-      promise = grump.run(handler, filename)
-
-      # if handler has an mtime function, we store the mtime functon to
-      # later compare if the underlying files have been updated.
-      cache_entry.mtime = handler.mtime if handler.mtime
+        tryHandler()
 
     else
-      promise = Promise.reject(new Error("file not found: #{filename}"))
+      Promise.reject(new Error("Grump: no handler matched for #{filename}"))
 
-    return @_resolveCacheEntry(promise, cache_entry, filename)
+    return resolveCacheEntry(promise, cache_entry, filename)
 
   getSync: (filename) ->
     if not Sync.Fibers.current
@@ -99,39 +152,6 @@ class Grump
 
     promise = @get(filename)
     util.syncPromise(promise)
-
-  _resolveCacheEntry: (promise, cache_entry, filename) ->
-    onResult = (result) ->
-      console.log "cache save for", filename
-      cache_entry.at = new Date()
-      cache_entry.rejected = false
-      cache_entry.result = result
-
-    onError = (error) ->
-      console.log chalk.red("cache save for " + "error"), filename
-      cache_entry.at = new Date()
-      cache_entry.rejected = true
-      cache_entry.result = error
-
-      # attach a filename info the the error
-      if not error._grump_filename
-        error._grump_filename = filename
-
-      return Promise.reject(error)
-
-    # we want the cache entry to be updated before the caller
-    # gets the resolved result, so we return a new promise here.
-    return cache_entry.result = promise.then(onResult, onError)
-
-  findHandler: (filename) ->
-    if filename.indexOf(@root) == 0
-      filename = filename.substring(@root.length)
-
-    for route, handler of @routes
-      if minimatch(filename, route, @minimatch_opts)
-        return handler
-
-    return null
 
   run: (handler, filename) ->
     grump = @
@@ -147,4 +167,5 @@ _.extend(Grump, handlers)
 
 Grump.GrumpFS  = GrumpFS
 Grump.Sync     = Sync
+Grump.mtime    = (filename) -> try fs.statSync(filename)
 module.exports = Grump

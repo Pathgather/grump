@@ -8,24 +8,6 @@ through = require('through2')
 util    = require("./util")
 Sync    = require("sync")
 
-# run all handlers until one of them resolves to a value
-AnyHandler = (handlers...) ->
-  return ({filename, grump}) ->
-    idx = 0
-
-    catchHandler = (error) ->
-      if handlers[idx]
-        result = handlers[idx]({filename, grump})
-        Promise.resolve(result)
-          .catch (error) ->
-            idx += 1
-            catchHandler(error)
-
-      else
-        Promise.reject(error)
-
-    catchHandler()
-
 CoffeeHandler = (options = {}) ->
   return ({filename, grump}) ->
     filename = filename.replace(/\.js(\?.*)?$/, ".coffee")
@@ -94,17 +76,14 @@ HamlHandler = (options = {}) ->
           Promise.reject(err)
 
 StaticHandler = ->
-  fn = ({filename}) ->
-    new Promise (resolve, reject) ->
-      fs.readFile filename, {encoding: "utf8"}, (err, result) ->
-        err && reject(err) || resolve(result)
-
-  fn.mtime = StaticHandler.mtime
-
-  return fn
-
-StaticHandler.mtime = (file) ->
-  try fs.statSync(file).mtime
+  tryStatic: true
+  handler: (ctx) ->
+    # we only run if tryStatic fails above, which means there's no file
+    throw new Error
+      code: "ENOENT"
+      errno: -2
+      message: "ENOENT, no such file or directory '#{filename}'"
+      path: ctx.filename
 
 BrowserifyHandler = (options = {}) ->
   options = _.extend {}, options,

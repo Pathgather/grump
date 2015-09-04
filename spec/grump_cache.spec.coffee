@@ -1,12 +1,13 @@
-_     = require("underscore")
-path  = require("path")
-Grump = require("../lib/grump")
-chalk = require("chalk")
+_          = require("underscore")
+path       = require("path")
+chalk      = require("chalk")
+proxyquire = require("proxyquire")
 
 describe "Grump", ->
   jasmine.DEFAULT_TIMEOUT_INTERVAL = 50
 
   getEntry = null
+  Grump    = null
 
   beforeEach ->
     @handler = jasmine.createSpy("handler").and.callFake ({filename, grump}) ->
@@ -22,6 +23,8 @@ describe "Grump", ->
         when "hello_as_dep_as_dep"
           grump.get("hello_as_dep").then (result) ->
             "dep: #{result}"
+
+    Grump = require("../lib/grump")
 
     @grump = new Grump
       root: "."
@@ -60,16 +63,24 @@ describe "Grump", ->
         done()
       .catch(fail)
 
-  describe "when handler has an mtime function", ->
+  describe "when using tryStatic option", ->
     beforeEach (done) ->
       @hello_at = new Date(Date.now() - 100)
       @hello_handler = jasmine.createSpy("hello handler").and.callFake -> "content that expires"
-      @hello_handler.mtime = jasmine.createSpy("mtime").and.callFake => @hello_at
+      @mtime = jasmine.createSpy("mtime").and.callFake => @hello_at
+
+      fakeFS =
+        readFile: jasmine.createSpy("readFile").and.callFake ->
+          arguments[2](new Error("file not found or something"))
+
+      Grump = proxyquire("../lib/grump", fs: fakeFS)
 
       @grump = new Grump
         root: "."
         routes:
-          "**/hello": @hello_handler
+          "**/hello":
+            tryStatic: true
+            handler: @hello_handler
           "**": @handler
 
       @expire_listener = jasmine.createSpy("expire listener")
@@ -79,11 +90,10 @@ describe "Grump", ->
         .then (result) =>
           @hello_handler.calls.reset()
           @entry = getEntry("hello")
+          expect(@entry.mtime).toBeDefined()
+          @entry.mtime = @mtime
           done()
         .catch(fail)
-
-    it "cache entry should have the same 'mtime' function attached", ->
-      expect(@entry.mtime).toBe(@hello_handler.mtime)
 
     it "cache entry should have an 'at' timestamp", ->
       expect(@entry.at).toBeDefined()
@@ -104,7 +114,9 @@ describe "Grump", ->
 
     describe "when entry.mtime returns a newer timestamp than entry.at", ->
       beforeEach ->
-        @hello_handler.mtime.and.callFake => new Date(@entry.at.getTime() + 100)
+        @mtime.and.callFake =>
+          console.log "calling the outdated mtime"
+          new Date(@entry.at.getTime() + 100)
 
       it "should call handler again", (done) ->
         @grump.get("hello")
@@ -128,7 +140,7 @@ describe "Grump", ->
           .catch(fail)
 
       it "should call handler when dep is expired", (done) ->
-        @hello_handler.mtime.and.returnValue(new Date(@entry.at.getTime()))
+        @mtime.and.returnValue(new Date(@entry.at.getTime()))
         @grump.get("hello_as_dep").then =>
           @grump.get("hello_as_dep2")
             .then =>
