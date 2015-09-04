@@ -10,21 +10,27 @@ GrumpCache = require("./grump_cache")
 GrumpFS    = require("./grumpfs")
 handlers   = require("./handlers")
 
+debug = true
+
 tryStatic = (filename, cache_entry, options = {}) ->
   cache_entry.mtime = Grump.mtime
   new Promise (resolve, reject) ->
     fs.readFile filename, options, (err, result) ->
-      if err then reject(err) else resolve(result)
+      if err
+        cache_entry._static_error = true
+        reject(err)
+      else
+        resolve(result)
 
 resolveCacheEntry = (promise, cache_entry, filename) ->
   ok = (result) ->
-    console.log chalk.gray("cache save for"), filename
+    console.log chalk.gray("cache save for"), filename if debug
     cache_entry.at = new Date()
     cache_entry.rejected = false
     cache_entry.result = result
 
   fail = (error) ->
-    console.log chalk.red("cache save for " + "error"), filename
+    console.log chalk.red("cache save for " + "error"), filename if debug
     cache_entry.at = new Date()
     cache_entry.rejected = true
     cache_entry.result = error
@@ -84,7 +90,7 @@ class Grump
     if not @cache.get(filename)
       cache_entry = @cache.init(filename)
       cache_entry.mtime = Grump.mtime
-      cache_entry.at = cache_entry.mtime(filename) || new Date()
+      cache_entry.at = Grump.mtime(filename) || new Date()
 
     @_parent_entry.deps[filename] = true
 
@@ -97,15 +103,15 @@ class Grump
     if cache_entry = @cache.get(filename)
       result = cache_entry.result
 
-      if cache_entry.rejected == null and typeof result == "object"
-        console.log chalk.green("cache hit for"), chalk.yellow("promise"), filename
+      if cache_entry.rejected == null and result and typeof result.then == "function"
+        console.log chalk.green("cache hit for"), chalk.yellow("promise"), filename if debug
         return result
       else if @cache.current(filename)
         if cache_entry.rejected == false
-          console.log chalk.green("cache hit for"), filename
+          console.log chalk.green("cache hit for"), filename if debug
           return Promise.resolve(result)
-        else # assume it's an error
-          console.log chalk.green("cache hit for"), chalk.red("error"), filename
+        else if cache_entry.rejected == true
+          console.log chalk.green("cache hit for"), chalk.red("error"), filename if debug
           return Promise.reject(result)
 
     cache_entry = @cache.init(filename)
@@ -117,7 +123,7 @@ class Grump
 
     promise = if handler
       tryHandler = =>
-        console.log chalk.yellow("running handler for #{filename}")
+        console.log chalk.yellow("running handler for #{filename}") if debug
 
         # create a new grump with attached cache_entry
         if @hasOwnProperty("_parent_entry")
@@ -167,5 +173,5 @@ _.extend(Grump, handlers)
 
 Grump.GrumpFS  = GrumpFS
 Grump.Sync     = Sync
-Grump.mtime    = (filename) -> try fs.statSync(filename)
+Grump.mtime    = (filename) -> try fs.statSync(filename).mtime
 module.exports = Grump

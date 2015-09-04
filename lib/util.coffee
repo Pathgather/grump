@@ -22,7 +22,7 @@ syncBench = (message = "", fn) ->
   return result
 
 logError = (error) ->
-  console.log chalk.red("ERROR"), (error.stack || error).toString()
+  console.log chalk.red("ERROR"), error.stack || error
 
 # convert a promise to a sync call using node-sync. must be called inside a Fiber
 syncPromise = (maybePromise) ->

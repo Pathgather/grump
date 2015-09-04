@@ -1,4 +1,5 @@
 _      = require("underscore")
+chalk  = require("chalk")
 events = require("events")
 
 module.exports = class GrumpCache extends events.EventEmitter
@@ -11,6 +12,7 @@ module.exports = class GrumpCache extends events.EventEmitter
   _expire: (key, entry) ->
     delete @_cache[key]
     @emit("expired", key, entry)
+    console.log chalk.cyan("expired"), key
     return false
 
   # an entry is current (not stale) if:
@@ -22,7 +24,7 @@ module.exports = class GrumpCache extends events.EventEmitter
     return false if not entry
 
     if parent_at and entry.at > parent_at
-      return @_expire(key, entry)
+      return false # expire the parent, not this entry
 
     deps_current = _.map _.keys(entry.deps), (dep) =>
       @current(dep, entry.at)
@@ -36,9 +38,9 @@ module.exports = class GrumpCache extends events.EventEmitter
       if not entry.at?
         throw new Error("GrumpCache: possibly pending file tested for current: #{key}")
 
-      if mtime? and entry.at > mtime
+      if mtime? and entry.at >= mtime
         return true
-      else if entry.rejected and not mtime?
+      else if not mtime? and entry._static_error
         return true
       else
         return @_expire(key, entry)

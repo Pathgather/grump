@@ -12,7 +12,7 @@ CoffeeHandler = (options = {}) ->
   return ({filename, grump}) ->
     filename = filename.replace(/\.js(\?.*)?$/, ".coffee")
     grump.get(filename).then (source) ->
-      coffee.compile(source, _.extend({}, options, {filename}))
+      coffee.compile(source.toString(), _.extend({}, options, {filename}))
 
 GulpHandler = (options = {}) ->
   File = require("vinyl")
@@ -68,7 +68,7 @@ HamlHandler = (options = {}) ->
     grump.get(htmlfile)
       .then (source) ->
         try
-          hamlc.render(source)
+          hamlc.render(source.toString())
         catch err
           if typeof err == "string"
             err = new Error(err)
@@ -79,11 +79,12 @@ StaticHandler = ->
   tryStatic: true
   handler: (ctx) ->
     # we only run if tryStatic fails above, which means there's no file
-    throw new Error
+    err = new Error("ENOENT, no such file or directory '#{ctx.filename}'")
+    _.extend err,
       code: "ENOENT"
       errno: -2
-      message: "ENOENT, no such file or directory '#{filename}'"
       path: ctx.filename
+    throw err
 
 BrowserifyHandler = (options = {}) ->
   options = _.extend {}, options,
@@ -92,7 +93,6 @@ BrowserifyHandler = (options = {}) ->
     packageCache: {}
 
   expired = (key, entry) ->
-    console.log chalk.red("expired"), key
     delete options.cache[key]
 
   return (ctx) ->
@@ -118,8 +118,15 @@ BrowserifyHandler = (options = {}) ->
             deps: _.extend({}, row.deps)
 
         this.push(row)
+        console.log chalk.magenta("bundle.pipeline.deps"), file
         ctx.grump.dep(file) # save the dependency in grump
         next()
+
+      bundle.on "package", (pkg) ->
+        file = path.join(pkg.__dirname, 'package.json')
+        console.log chalk.magenta("bundle.package"), file
+        ctx.grump.dep(file)
+        options.packageCache[file] = pkg
 
       bundle
         .add(files)

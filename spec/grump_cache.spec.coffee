@@ -115,7 +115,6 @@ describe "Grump", ->
     describe "when entry.mtime returns a newer timestamp than entry.at", ->
       beforeEach ->
         @mtime.and.callFake =>
-          console.log "calling the outdated mtime"
           new Date(@entry.at.getTime() + 100)
 
       it "should call handler again", (done) ->
@@ -140,7 +139,7 @@ describe "Grump", ->
           .catch(fail)
 
       it "should call handler when dep is expired", (done) ->
-        @mtime.and.returnValue(new Date(@entry.at.getTime()))
+        @mtime.and.returnValue(new Date(@entry.at.getTime() + 100))
         @grump.get("hello_as_dep").then =>
           @grump.get("hello_as_dep2")
             .then =>

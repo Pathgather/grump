@@ -196,3 +196,6 @@ describe "Grump", ->
           expect(file).toBeDefined()
           expect(path.basename(file)).toBe("hello_error")
           done()
+
+  describe "dep()", ->
+    it "should create an entry and it should just kind of work with the rest of Grump"

@@ -51,7 +51,7 @@ class GrumpFS
       throw new Error("GrumpFS: tried to use a *Sync function while not in a fiber")
 
   createReadStream: (filename, options) ->
-    console.log chalk.gray("createReadStream"), arguments if debug
+    console.log chalk.gray("createReadStream"), arguments[0] if debug
     if @_isRooted(filename)
 
       st = new stream.Readable()
@@ -71,7 +71,7 @@ class GrumpFS
       fs.createReadStream(arguments...)
 
   exists: (filename, cb) =>
-    console.log chalk.gray("exists"), arguments if debug
+    console.log chalk.gray("exists"), arguments[0] if debug
     if @_isRooted(filename)
       @_grump.get(filename)
         .then ->
@@ -82,12 +82,12 @@ class GrumpFS
       fs.exists(arguments...)
 
   existsSync: (filename) =>
-    console.log chalk.gray("existsSync"), arguments if debug
+    console.log chalk.gray("existsSync"), arguments[0] if debug
     @_assertInFiber()
     @exists.sync(null, filename)
 
   readFile: (filename, options, cb) =>
-    console.log chalk.gray("readFile"), arguments if debug
+    console.log chalk.gray("readFile"), arguments[0] if debug
 
     if @_isRooted(filename)
       @_grumpGet(filename, cb || options)
@@ -95,12 +95,12 @@ class GrumpFS
       fs.readFile(arguments...)
 
   readFileSync: (filename, options) =>
-    console.log chalk.gray("readFileSync"), arguments if debug
+    console.log chalk.gray("readFileSync"), arguments[0] if debug
     @_assertInFiber()
     @readFile.sync(null, filename, options)
 
   realpath: (filename, cache, cb) ->
-    console.log chalk.gray("realpath"), arguments if debug
+    console.log chalk.gray("realpath"), arguments[0] if debug
 
     if @_isRooted(filename)
       if not path.isAbsolute(filename)
@@ -111,7 +111,7 @@ class GrumpFS
       fs.realpath(arguments...)
 
   stat: (filename, cb) =>
-    console.log chalk.gray("stat"), arguments if debug
+    console.log chalk.gray("stat"), arguments[0] if debug
 
     if @_isRooted(filename)
       @_grump.get(filename)
