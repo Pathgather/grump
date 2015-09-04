@@ -136,4 +136,4 @@ BrowserifyHandler = (options = {}) ->
 
           if err then reject(err) else resolve(body)
 
-module.exports = {AnyHandler, CoffeeHandler, GulpHandler, HamlHandler, StaticHandler, BrowserifyHandler}
+module.exports = {CoffeeHandler, GulpHandler, HamlHandler, StaticHandler, BrowserifyHandler}
