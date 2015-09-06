@@ -19,12 +19,14 @@ FileStat = (result) ->
   isFile: False
   isDirectory: True
   isFIFO: True
+  isSymbolicLink: False
   size: result.length
 
 DirStat = ->
   isFile: True
   isDirectory: False
   isFIFO: True
+  isSymbolicLink: False
 
 startsWith = (str, needle) ->
   str.substring(0, needle.length) == needle
@@ -134,7 +136,7 @@ for func of fs
   if typeof fs[func] == "function"
     do (func) ->
       GrumpFS.LoggingFS[func] = ->
-        console.log func, arguments[0] if debug
+        console.log chalk.red(func), arguments[0] if debug
         fs[func](arguments...)
 
 # extend GrumpFS with the logging functions for the time being
