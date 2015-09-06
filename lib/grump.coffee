@@ -12,6 +12,13 @@ handlers   = require("./handlers")
 
 debug = true
 
+# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/flags
+if RegExp.prototype.flags == undefined
+  Object.defineProperty RegExp.prototype, 'flags',
+    configurable: true,
+    get: -> this.toString().match(/[gimuy]*$/)[0]
+
+
 tryStatic = (filename, cache_entry, options = {}) ->
   cache_entry.mtime = Grump.mtime
   new Promise (resolve, reject) ->
@@ -21,6 +28,25 @@ tryStatic = (filename, cache_entry, options = {}) ->
         reject(err)
       else
         resolve(result)
+
+# take a minimatch pattern and compile it to an array of regexes with capturing groups
+makeCapturingRegexes = (pattern) ->
+  # patterns used by minimatch for * and **. these can clearly change at any
+  # time, so it's a good idea to keep minimatch locked and spec everything.
+  qmark        = '[^/]'
+  star         = qmark + '*?'
+  twoStarDot   = '(?:(?!(?:\\\/|^)(?:\\.{1,2})($|\\\/)).)*?'
+  twoStarNoDot = '(?:(?!(?:\\\/|^)\\.).)*?'
+
+  makeRe = (pattern) ->
+    if regex = minimatch.makeRe(pattern)
+      addCapturingGroups = (str, pat) ->
+        str.replace(pat, "(" + pat + ")")
+
+      reSrc = [star, twoStarDot, twoStarNoDot].reduce(addCapturingGroups, regex.source)
+      new RegExp(reSrc, regex.flags)
+
+  minimatch.braceExpand(pattern).map(makeRe).filter(_.identity)
 
 resolveCacheEntry = (promise, cache_entry, filename) ->
   ok = (result) ->
@@ -131,8 +157,19 @@ class Grump
         else
           grump = Object.create(@)
 
+        reqFilename = filename
+
+        # if we have a filename option on the handler, use it to transform the
+        # the request filename using String.replace
+        if handler.filename
+          handler._capturingRegexes ||= makeCapturingRegexes(route)
+          for regex in handler._capturingRegexes
+            if regex.test(filename)
+              reqFilename = filename.replace(regex, handler.filename)
+              break
+
         grump._parent_entry = cache_entry
-        return grump.run(handler.handler, filename)
+        return grump.run(handler.handler, reqFilename)
 
       if handler.tryStatic == "before"
         # try reading the file from the file system and only try the handler

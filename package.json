@@ -18,7 +18,7 @@
     "concat-stream": "^1.5.0",
     "detective": "^4.2.0",
     "haml-coffee": "^1.14.1",
-    "minimatch": "^2.0.8",
+    "minimatch": "2.0.10",
     "pretty-hrtime": "^1.0.0",
     "strip-ansi": "^3.0.0",
     "sync": "^0.2.5",

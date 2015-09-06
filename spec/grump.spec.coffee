@@ -153,6 +153,49 @@ describe "Grump", ->
             expect(error).toBe(problem)
             done()
 
+  describe "filename", ->
+    handledFilename = null
+
+    routes =
+      "/lib/*.{coffee,js}": "lib/$1.js?compile"
+      "/*.bundle.js": "src/$1/index.js"
+      "*.coffee": "$1.js"
+      "src/**": "scripts/$1"
+      "static/**/*.png": "$1/$2"
+
+    tests =
+      "lib/hello.js": "lib/hello.js?compile"
+      "lib/hello.coffee": "lib/hello.js?compile"
+      "hello.coffee": "hello.js"
+      "grump.bundle.js": "src/grump/index.js"
+      "src/hello": "scripts/hello"
+      "src/hello/world": "scripts/hello/world"
+      "static/main/index.png": "main/index"
+      "static/.tmp/hello.png": ".tmp/hello"
+
+    beforeEach ->
+      handledFilename = null
+      handler = jasmine.createSpy("handler").and.callFake (ctx) ->
+        handledFilename = ctx.filename?.replace(process.cwd() + "/", "")
+
+      options =
+        minimatch: dot: true
+        routes: {}
+
+      for route, filename of routes
+        options.routes[route] = {filename, handler}
+
+      grump = new Grump(options)
+
+    for reqFilename, expectedFilename of tests
+      do (reqFilename, expectedFilename) ->
+        it "should handle #{reqFilename}", (done) ->
+          grump.get(reqFilename)
+            .then ->
+              expect(handledFilename).toBe(expectedFilename)
+              done()
+            .catch(fail)
+
   describe "get()", ->
     beforeEach ->
       grump = new Grump(options)
