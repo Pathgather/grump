@@ -154,6 +154,7 @@ describe "Grump", ->
             done()
 
   describe "filename", ->
+
     handledFilename = null
 
     routes =
@@ -176,7 +177,8 @@ describe "Grump", ->
     beforeEach ->
       handledFilename = null
       handler = jasmine.createSpy("handler").and.callFake (ctx) ->
-        handledFilename = ctx.filename?.replace(process.cwd() + "/", "")
+        expect(ctx.filename.indexOf(root)).toBe(0)
+        handledFilename = ctx.filename?.replace(root + "/", "")
 
       options =
         minimatch: dot: true
@@ -185,6 +187,7 @@ describe "Grump", ->
       for route, filename of routes
         options.routes[route] = {filename, handler}
 
+      root = process.cwd()
       grump = new Grump(options)
 
     for reqFilename, expectedFilename of tests

@@ -165,7 +165,7 @@ class Grump
           handler._capturingRegexes ||= makeCapturingRegexes(route)
           for regex in handler._capturingRegexes
             if regex.test(filename)
-              reqFilename = filename.replace(regex, handler.filename)
+              reqFilename = path.join(@root, filename.replace(regex, handler.filename))
               break
 
         grump._parent_entry = cache_entry
