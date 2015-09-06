@@ -63,7 +63,7 @@ class Grump
       if handler.tryStatic == true
         handler.tryStatic = "before"
 
-      @routes[path.resolve(@root, route)] = handler
+      @routes[path.resolve(@root, "./" + route)] = handler
 
     @cache = new GrumpCache()
 

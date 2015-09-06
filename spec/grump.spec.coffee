@@ -46,16 +46,24 @@ describe "Grump", ->
   it "should initialize without any options", ->
     expect(-> new Grump()).not.toThrow()
 
-  it "should assume that all patterns start with the root path", (done) ->
-    delete options.routes["**"]
-    options.routes["*"] = handler
-    grump = new Grump(options)
-    console.log grump.routes
-    grump.get("hello")
-      .then ->
-        expect(handler).toHaveBeenCalled()
-        done()
-      .catch(fail)
+  describe "should assume that all patterns start with the root path", ->
+    afterEach (done) ->
+      delete options.routes["**"]
+      grump = new Grump(options)
+      grump.get("hello")
+        .then ->
+          expect(handler).toHaveBeenCalled()
+          done()
+        .catch(fail)
+
+    it "when starting with name", ->
+      options.routes["hello"] = handler
+
+    it "when starting with *", ->
+      options.routes["*"] = handler
+
+    it "when starting with /", ->
+      options.routes["/*"] = handler
 
   it "should accept handler as an object", (done) ->
     options.routes["**"] = {handler}
