@@ -1,14 +1,18 @@
 _         = require("underscore")
 chalk     = require("chalk")
 fs        = require("fs")
+glob      = require("glob")
 minimatch = require("minimatch")
 path      = require("path")
 Sync      = require("sync")
-util      = require("./util")
+
+require('es6-promise').polyfill()
+require('promise.prototype.finally')
 
 GrumpCache = require("./grump_cache")
 GrumpFS    = require("./grumpfs")
 handlers   = require("./handlers")
+util       = require("./util")
 
 debug = true
 
@@ -48,6 +52,22 @@ makeCapturingRegexes = (pattern) ->
 
   minimatch.braceExpand(pattern).map(makeRe).filter(_.identity)
 
+makeFilenamePattern = (route, filename) ->
+  globs = route.match(/(\*+)/g)
+  filename.replace /\$\d+/g, (match) ->
+    globs[parseInt(match.slice(1)) - 1]
+
+makeReverseFilenames = (route, filename) ->
+  for route in minimatch.braceExpand(route)
+    submatches = filename.match(/\$\d+/g)
+    i = 0
+    route.replace /\*+/g, (match) ->
+      submatches[i++]
+
+assertValidFilename = (route, filename) ->
+  if route.split(/\*+/g).length != filename.split(/\$\d+/).length
+    throw new Error("Grump: mismatched filename option '#{filename}' for route '#{route}'")
+
 resolveCacheEntry = (promise, cache_entry, filename) ->
   ok = (result) ->
     console.log chalk.gray("cache save for"), filename if debug
@@ -84,12 +104,33 @@ class Grump
       handler = if typeof handler == "function"
         {handler}
       else
-        _.extend(handler)
+        _.extend({}, handler)
+
+      route = path.join(@root, route)
+      handler._expandedRoute = minimatch.braceExpand(route)
 
       if handler.tryStatic == true
         handler.tryStatic = "before"
 
-      @routes[path.resolve(@root, "./" + route)] = handler
+      if handler.glob and typeof handler.glob != "function"
+        throw new Error("Grump: glob option should be a function that returns all absolute paths matching the route")
+
+      if handler.filename
+        handler.filename = path.join(@root, handler.filename)
+        assertValidFilename(route, handler.filename)
+        handler._capturingRegexes = makeCapturingRegexes(route)
+
+        # filenamePattern is used to match potential input files
+        handler._filenamePattern = makeFilenamePattern(route, handler.filename)
+        handler._filenamePatternRegexes = makeCapturingRegexes(handler._filenamePattern)
+
+        # reverseFilename is used to generate output filenames from matched inputs
+        handler._reverseFilenames = makeReverseFilenames(route, handler.filename)
+
+      @routes[route] = handler
+
+    if Object.keys(@routes).length == 0
+      console.log "Grump: no routes were defined, Grump is not going to be very useful"
 
     @cache = new GrumpCache()
 
@@ -162,10 +203,9 @@ class Grump
         # if we have a filename option on the handler, use it to transform the
         # the request filename using String.replace
         if handler.filename
-          handler._capturingRegexes ||= makeCapturingRegexes(route)
           for regex in handler._capturingRegexes
             if regex.test(filename)
-              reqFilename = path.join(@root, filename.replace(regex, handler.filename))
+              reqFilename = filename.replace(regex, handler.filename)
               break
 
         grump._parent_entry = cache_entry
@@ -195,6 +235,67 @@ class Grump
 
     promise = @get(filename)
     util.syncPromise(promise)
+
+  glob: (pattern) ->
+
+    pattern = path.join(@root, pattern)
+    matcher = minimatch.filter(pattern)
+
+    files = []
+    filenamePatterns = []
+
+    # perf: try to cull the list of routes here to only ones that can match the pattern.
+    # this is not trivial, so I'm putting it off for now. right now, an array of every
+    # single file in the tree (virtual + real) will be visited.
+    for route, handler of @routes
+      if route.indexOf("*") == -1
+        files.push(handler._expandedRoute)
+      else
+        if handler.glob
+          files.push(handler.glob())
+        else
+          if handler.tryStatic
+            files.push new Promise (resolve, reject) ->
+              glob route, (err, files) ->
+                if err
+                  reject(err)
+                else
+                  resolve(files)
+
+          if handler._filenamePattern
+            filenamePatterns.push([handler._filenamePatternRegexes, handler._reverseFilenames])
+
+    assertIterationDepth = _.after 10, ->
+      throw new Error("Grump: glob() filename patterns generated new files more than 10 times")
+
+    addFilenamePatterns = (files) ->
+      assertIterationDepth()
+      newFiles = []
+
+      for file in files
+        for [regexes, replacements] in filenamePatterns
+          for regex in regexes
+            if regex.test(file)
+              for replacement in replacements
+                newFiles.push(file.replace(regex, replacement))
+              break
+
+      if newFiles.length
+        # if we generated new files, these could cause newer filenames to be
+        # generated, so we call ourselves here recursively until done.
+        files.push(addFilenamePatterns(newFiles)...)
+
+      return files
+
+    Promise.all(files)
+      .then(_.flatten)
+      .then (files) ->
+        if filenamePatterns.length
+          addFilenamePatterns(files)
+        else
+          files
+      .then (files) ->
+        _.uniq(files.filter(matcher))
 
   run: (handler, filename) ->
     grump = @

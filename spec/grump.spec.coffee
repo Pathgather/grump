@@ -177,8 +177,7 @@ describe "Grump", ->
     beforeEach ->
       handledFilename = null
       handler = jasmine.createSpy("handler").and.callFake (ctx) ->
-        expect(ctx.filename.indexOf(root)).toBe(0)
-        handledFilename = ctx.filename?.replace(root + "/", "")
+        handledFilename = ctx.filename
 
       options =
         minimatch: dot: true
@@ -195,7 +194,7 @@ describe "Grump", ->
         it "should handle #{reqFilename}", (done) ->
           grump.get(reqFilename)
             .then ->
-              expect(handledFilename).toBe(expectedFilename)
+              expect(handledFilename).toBe(path.resolve(expectedFilename))
               done()
             .catch(fail)
 
@@ -253,3 +252,73 @@ describe "Grump", ->
 
   describe "dep()", ->
     it "should create an entry and it should just kind of work with the rest of Grump"
+
+  describe "glob()", ->
+    pathResolve = (files...) ->
+      for file in files
+        path.resolve(file)
+
+    it "should match static filename patterns", (done) ->
+      grump = new Grump
+        routes:
+          "images/hello.png": handler
+          "hello.{js,coffee}": handler
+
+      expect(grump.glob("**")).toResolveWith(pathResolve("images/hello.png", "hello.js", "hello.coffee"), done)
+
+    it "should call glob to get file list", (done) ->
+      grump = new Grump
+        routes:
+          "images/*":
+            glob: -> pathResolve("images/hello.png", "images/bye.bmp")
+            handler: handler
+          "scripts/*":
+            glob: -> Promise.resolve(pathResolve("scripts/hello.coffee", "scripts/bye.js"))
+            handler: handler
+
+      expect(grump.glob("**/hello.*")).toResolveWith(pathResolve("images/hello.png", "scripts/hello.coffee"), done)
+
+    it "should use filename to transform matches recursively", (done) ->
+      grump = new Grump
+        routes:
+          "src/{a,b,c}.coffee": handler
+          "app/*.{bundle,bundlez}":
+            filename: "src/$1.coffee"
+            handler: handler
+          "*.js":
+            filename: "app/$1.bundle"
+            handler: handler
+
+      expect(grump.glob("*.js")).toResolveWith(pathResolve("a.js", "b.js", "c.js"), done)
+
+    it "should blow up when filenames would cause infinite recursion", (done) ->
+      grump = new Grump
+        routes:
+          "hello.coffee":
+            handler: handler
+          "*.coffee":
+            filename: "$1.js"
+            handler: handler
+          "*.js":
+            filename: "$1.coffee"
+            handler: handler
+
+      expect(grump.glob("*.js")).toReject done, (err) ->
+        expect(err).toEqual(jasmine.any(Error))
+        expect(err.message).toMatch(/filename patterns generated new files more than/)
+
+    it "should use glob for tryStatic handlers", (done) ->
+      glob = jasmine.createSpy("glob").and.callFake (pat, cb) ->
+          cb(null, pathResolve('hello.coffee', 'bye.coffee'))
+
+      Grump = proxyquire("../lib/grump", {glob})
+      grump = new Grump
+        routes:
+          "*.coffee": Grump.StaticHandler()
+          "*.js":
+            filename: "$1.coffee"
+            handler: handler
+
+      expect(grump.glob("*.js")).toResolve done, (files) ->
+        expect(glob).toHaveBeenCalledWith(pathResolve("*.coffee")[0], jasmine.any(Function))
+        expect(files).toEqual(pathResolve("hello.js", "bye.js"))

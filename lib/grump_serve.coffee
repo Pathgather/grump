@@ -1,9 +1,10 @@
 http         = require("http")
+path         = require("path")
 prettyHrtime = require("pretty-hrtime")
-util         = require("./util")
-Sync         = require("sync")
 stripAnsi    = require("strip-ansi")
+Sync         = require("sync")
 url          = require("url")
+util         = require("./util")
 
 # Exposed as Grump#serve method, this method starts a web server that serves
 # grump request as well as pretty prints the errors.
@@ -26,7 +27,7 @@ module.exports = (options = {}) ->
 
     Sync ->
       try
-        result = grump.getSync(grump.root + url.parse(request.url).pathname)
+        result = grump.getSync(path.join(grump.root, url.parse(request.url).pathname))
         code = 200
 
       catch error
