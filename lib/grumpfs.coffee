@@ -5,7 +5,7 @@ path = require("path")
 Sync = require('sync')
 stream = require("stream")
 
-debug = false
+debug = true
 
 NotFoundError = (filename) ->
   errno: -2
@@ -84,9 +84,25 @@ class GrumpFS
       fs.exists(arguments...)
 
   existsSync: (filename) =>
+    if @_grump.__bypassSync
+      return GrumpFS.LoggingFS.existsSync(arguments...)
+
     console.log chalk.gray("existsSync"), arguments[0] if debug
     @_assertInFiber()
     @exists.sync(null, filename)
+
+  readdir: (filename, cb) ->
+    console.log chalk.gray("readdir"), arguments[0] if debug
+
+    if @_isRooted(filename)
+      relative = path.relative(@_grump.root, filename)
+      @_grump.glob(path.join(relative, "*"))
+        .then (files) ->
+          process.nextTick -> cb(null, files.map(path.basename))
+        .catch (err) ->
+          process.nextTick -> cb(err)
+    else
+      fs.readdir(arguments...)
 
   readFile: (filename, options, cb) =>
     console.log chalk.gray("readFile"), arguments[0] if debug
@@ -97,6 +113,9 @@ class GrumpFS
       fs.readFile(arguments...)
 
   readFileSync: (filename, options) =>
+    if @_grump.__bypassSync
+      return GrumpFS.LoggingFS.readFileSync(arguments...)
+
     console.log chalk.gray("readFileSync"), arguments[0] if debug
     @_assertInFiber()
     @readFile.sync(null, filename, options)

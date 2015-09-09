@@ -96,6 +96,10 @@ class Grump
     if not (@ instanceof Grump)
       return new Grump(config)
 
+    # option whether *Sync calls on GrumpFS should just go to node's fs
+    @_bypassSync = (val) => @__bypassSync = val
+    @_bypassSync(false)
+
     @minimatch_opts = config.minimatch || {}
     @root = fs.realpathSync(config.root || ".")
 
@@ -198,8 +202,6 @@ class Grump
         else
           grump = Object.create(@)
 
-        reqFilename = filename
-
         # if we have a filename option on the handler, use it to transform the
         # the request filename using String.replace
         if handler.filename
@@ -207,6 +209,13 @@ class Grump
             if regex.test(filename)
               reqFilename = filename.replace(regex, handler.filename)
               break
+
+          if not reqFilename?
+            # TODO: this is a known bug with patterns like /**/*.js and filename like /hello.js
+            # normal minimatch will be ok with it, but our capturing regexes seem to miss it.
+            throw new Error("Grump: the route '#{route}' in regex form didn't match #{filename}")
+        else
+          reqFilename = filename
 
         grump._parent_entry = cache_entry
         return grump.run(handler.handler, reqFilename)
@@ -240,6 +249,8 @@ class Grump
 
     pattern = path.join(@root, pattern)
     matcher = minimatch.filter(pattern)
+
+    console.log chalk.yellow("running glob for #{pattern}") if debug
 
     files = []
     filenamePatterns = []

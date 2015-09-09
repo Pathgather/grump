@@ -153,6 +153,23 @@ describe "Grump", ->
             expect(error).toBe(problem)
             done()
 
+    describe "when used with tryStatic", ->
+      beforeEach ->
+        options.routes =
+          "*.js":
+            tryStatic: true
+            filename: "$1.coffee"
+            handler: handler
+
+        grump = new Grump(options)
+
+      it "should try filename with original filename", (done) ->
+        expect(grump.get("hello.js")).toResolve done, ->
+          expect(fakeFS.readFile).toHaveBeenCalledWith(path.resolve("hello.js"),
+            jasmine.any(Object),
+            jasmine.any(Function))
+          expect(handler).toHaveBeenCalledWith(jasmine.objectContaining(filename: path.resolve("hello.coffee")))
+
   describe "filename", ->
 
     handledFilename = null
@@ -171,6 +188,7 @@ describe "Grump", ->
       "grump.bundle.js": "src/grump/index.js"
       "src/hello": "scripts/hello"
       "src/hello/world": "scripts/hello/world"
+      # "/static/womp.png": "/womp.png"
       "static/main/index.png": "main/index"
       "static/.tmp/hello.png": ".tmp/hello"
 
