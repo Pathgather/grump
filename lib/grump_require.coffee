@@ -2,29 +2,31 @@ chalk     = require("chalk")
 detective = require("detective")
 fs        = require("fs")
 Module    = require("module")
-Sync      = require("sync")
+resolve   = require("resolve")
 
 dep_cache = {}
 
-usesFS = (id) ->
-  'fs' in detective(fs.readFileSync(id))
-
 # populate the dep cache by loading the module, parsing it and all of
-# it's children to see if there are any require('fs') in them. if so,
+# it's requires to see if there are any require('fs') in them. if so,
 # those are the deps we want to keep track of and re-load every time.
 # return: true if id or any of it's children contain a require('fs')
-usesRequireFS = (id, module) ->
+usesRequireFS = (id, name, module) ->
   if dep_cache[id]
     return dep_cache[id].usesFS || dep_cache[id].length > 0
 
-  module.require(id)
+  module.require(name)
+  module = require.cache[id]
+
+  deps = detective(fs.readFileSync(id))
 
   dep_cache[id] = []
-  dep_cache[id].usesFS = usesFS(id)
+  dep_cache[id].usesFS = ("fs" in deps)
 
-  for child in require.cache[id].children
-    if usesRequireFS(child.id, module)
-      dep_cache[id].push(child.id)
+  for child_name in deps
+    if not resolve.isCore(child_name)
+      child_id = Module._resolveFilename(child_name, module)
+      if usesRequireFS(child_id, child_name, module)
+        dep_cache[id].push(child_id)
 
   return dep_cache[id].usesFS || dep_cache[id].length > 0
 
@@ -44,13 +46,10 @@ module.exports = (name, module) ->
   # there is no module.require.resolve, so we resort to this hackery.
   id = Module._resolveFilename(name, module)
 
-  if require.cache[id] and not dep_cache[id]
-    throw new Error("Grump.require: #{id} already in cache!")
-
   # check if this or any of it's dependencies use require("fs")
   # if no, we can just return the entry from require.cache
-  if not usesRequireFS(id, module)
-    return require.cache[id].exports
+  if not usesRequireFS(id, name, module)
+    return module.require(name)
 
   evictFromCache(id)
 

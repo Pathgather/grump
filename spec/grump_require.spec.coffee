@@ -42,6 +42,15 @@ describe "Grump#require", ->
 
     expect(hello).toEqual(hello2)
 
+  it "should handle already cached shared dependencies", ->
+    hello_dep = require("./support/hello_dep")
+    hello = grump.require("./support/hello.js", module)
+    expect(hello.dep).not.toBe(hello_dep)
+
+  it "should require files with nonstandard extensions", ->
+    hello = grump.require("./support/i_like", module)
+    expect(hello.message).toBe("hello")
+
   it "should return GrumpFS from require('fs') inside required files", ->
     hello = grump.require("./support/hello.js", module)
     expect(hello.dep.fs instanceof GrumpFS).toBe(true)
