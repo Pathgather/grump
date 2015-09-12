@@ -8,6 +8,8 @@ through = require('through2')
 util    = require("./util")
 Sync    = require("sync")
 
+debug = false
+
 CoffeeHandler = (options = {}) ->
   return ({filename, grump}) ->
     filename = filename.replace(/\.js(\?.*)?$/, ".coffee")
@@ -118,13 +120,13 @@ BrowserifyHandler = (options = {}) ->
             deps: _.extend({}, row.deps)
 
         this.push(row)
-        console.log chalk.magenta("bundle.pipeline.deps"), file
+        console.log chalk.magenta("bundle.pipeline.deps"), file if debug
         ctx.grump.dep(file) # save the dependency in grump
         next()
 
       bundle.on "package", (pkg) ->
         file = path.join(pkg.__dirname, 'package.json')
-        console.log chalk.magenta("bundle.package"), file
+        console.log chalk.magenta("bundle.package"), file if debug
         ctx.grump.dep(file)
         options.packageCache[file] = pkg
 

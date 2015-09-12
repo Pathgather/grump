@@ -91,7 +91,7 @@ class GrumpFS
     @_assertInFiber()
     @exists.sync(null, filename)
 
-  readdir: (filename, cb) ->
+  readdir: (filename, cb) =>
     console.log chalk.gray("readdir"), arguments[0] if debug
 
     if @_isRooted(filename)
@@ -147,6 +147,9 @@ class GrumpFS
 
     else
       fs.stat(arguments...)
+
+  lstat: =>
+    @stat(arguments...)
 
 # a helper class that wraps node's fs and simply logs all calls
 GrumpFS.LoggingFS = Object.create(fs)
