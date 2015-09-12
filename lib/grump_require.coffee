@@ -60,12 +60,8 @@ module.exports = (name, module) ->
   # any *Sync calls during the require will wreak havoc on the little
   # prison we're building since the execution thread will be paused and
   # other code will run while the require.cache.fs is in effect.
-  # the solution is to
-  @_bypassSync(true)
-
-  exports = module.require(name)
+  result = @_bypassSync ->
+    result = module.require(name)
 
   delete require.cache.fs
-  @_bypassSync(false)
-
-  return exports
+  return result

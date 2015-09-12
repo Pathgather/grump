@@ -1,3 +1,5 @@
+fs = require("fs")
+
 describe "Grump#require", ->
   jasmine.DEFAULT_TIMEOUT_INTERVAL = 50
 
@@ -80,3 +82,15 @@ describe "Grump#require", ->
       expect(handler).toHaveBeenCalled()
       expect(result).toBe("tnetnoc")
       done()
+
+  describe "when requiring a file that does Sync calls", ->
+    it "should bypass grump", ->
+      src = null
+      handler = jasmine.createSpy("handler").and.returnValue("content")
+      grump = new Grump
+        routes:
+          "**": handler
+
+      fn = -> src = grump.require("./support/with_sync_call", module)
+      expect(fn).not.toThrow()
+      expect(src).toEqual(fs.readFileSync("./spec/support/with_sync_call.js"))

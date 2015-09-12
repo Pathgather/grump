@@ -96,10 +96,6 @@ class Grump
     if not (@ instanceof Grump)
       return new Grump(config)
 
-    # option whether *Sync calls on GrumpFS should just go to node's fs
-    @_bypassSync = (val) => @__bypassSync = val
-    @_bypassSync(false)
-
     @minimatch_opts = config.minimatch || {}
     @root = fs.realpathSync(config.root || ".")
 
@@ -140,6 +136,12 @@ class Grump
 
   require: require("./grump_require")
   serve: require("./grump_serve")
+
+  _bypassSync: (fn) ->
+    @__bypassSync = true
+    result = fn()
+    @__bypassSync = false
+    return result
 
   Object.defineProperties @prototype,
     fs:
