@@ -53,6 +53,14 @@ describe "Grump#require", ->
     hello = grump.require("./support/i_like", module)
     expect(hello.message).toBe("hello")
 
+  it "should handle files with requires that will fail at runtime", ->
+    value = grump.require("./support/failed_require", module)
+    expect(value).toBe("s'all good")
+
+  xit "should handle requires with static expressions", ->
+    hello_dep = grump.require("./support/static_exp", module)
+    expect(hello_dep.fs).toBe(grump.fs)
+
   it "should return GrumpFS from require('fs') inside required files", ->
     hello = grump.require("./support/hello.js", module)
     expect(hello.dep.fs instanceof GrumpFS).toBe(true)

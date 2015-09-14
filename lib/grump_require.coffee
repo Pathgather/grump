@@ -24,9 +24,10 @@ usesRequireFS = (id, name, module) ->
 
   for child_name in deps
     if not resolve.isCore(child_name)
-      child_id = Module._resolveFilename(child_name, module)
-      if usesRequireFS(child_id, child_name, module)
-        dep_cache[id].push(child_id)
+      try
+        child_id = Module._resolveFilename(child_name, module)
+        if usesRequireFS(child_id, child_name, module)
+          dep_cache[id].push(child_id)
 
   return dep_cache[id].usesFS || dep_cache[id].length > 0
 
