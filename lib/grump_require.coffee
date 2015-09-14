@@ -32,11 +32,12 @@ usesRequireFS = (id, name, module) ->
   return dep_cache[id].usesFS || dep_cache[id].length > 0
 
 evictFromCache = (id) ->
-  if dep_cache[id]
-    for child_id in dep_cache[id]
-      evictFromCache(child_id)
-
+  if child_deps = dep_cache[id]
+    delete dep_cache[id]
     delete require.cache[id]
+
+    for child_id in child_deps
+      evictFromCache(child_id)
 
 module.exports = (name, module) ->
 

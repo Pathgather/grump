@@ -61,6 +61,13 @@ describe "Grump#require", ->
     hello_dep = grump.require("./support/static_exp", module)
     expect(hello_dep.fs).toBe(grump.fs)
 
+  it "should handle requires with cycles", ->
+    fn = ->
+      value = grump.require("./support/cycle_a", module)
+      expect(value).toBe("hello world")
+
+    expect(fn).not.toThrow()
+
   it "should return GrumpFS from require('fs') inside required files", ->
     hello = grump.require("./support/hello.js", module)
     expect(hello.dep.fs instanceof GrumpFS).toBe(true)
