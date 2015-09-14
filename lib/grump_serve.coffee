@@ -13,6 +13,7 @@ module.exports = (options = {}) ->
     throw new Error("Grump: missing port option")
 
   grump = @
+  root = path.resolve(options.root || grump.root)
 
   logRequest = (request, response) ->
     start = process.hrtime()
@@ -27,7 +28,7 @@ module.exports = (options = {}) ->
 
     Sync ->
       try
-        result = grump.getSync(path.join(grump.root, url.parse(request.url).pathname))
+        result = grump.getSync(path.join(root, url.parse(request.url).pathname))
         code = 200
 
       catch error
