@@ -139,7 +139,7 @@ describe "Grump", ->
           .catch(fail)
 
       it "should call handler when dep is expired", (done) ->
-        @mtime.and.returnValue(new Date(@entry.at.getTime() + 100))
+        @mtime.and.returnValue(new Date(@entry.at.getTime() + 150))
         @grump.get("hello_as_dep").then =>
           @grump.get("hello_as_dep2")
             .then =>

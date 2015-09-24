@@ -5,7 +5,7 @@ path = require("path")
 Sync = require('sync')
 stream = require("stream")
 
-debug = true
+debug = false
 
 NotFoundError = (filename) ->
   errno: -2

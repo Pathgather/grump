@@ -14,7 +14,7 @@ GrumpFS    = require("./grumpfs")
 handlers   = require("./handlers")
 util       = require("./util")
 
-debug = true
+debug = false
 
 # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/flags
 if RegExp.prototype.flags == undefined
@@ -129,11 +129,12 @@ class Grump
 
       @routes[route] = handler
 
-    if Object.keys(@routes).length == 0
+    if Object.keys(@routes).length == 0 and debug
       console.log "Grump: no routes were defined, Grump is not going to be very useful"
 
     @cache = new GrumpCache()
 
+  glob: require("./grump_glob")
   require: require("./grump_require")
   serve: require("./grump_serve")
 
@@ -246,69 +247,6 @@ class Grump
 
     promise = @get(filename)
     util.syncPromise(promise)
-
-  glob: (pattern) ->
-
-    pattern = path.join(@root, pattern)
-    matcher = minimatch.filter(pattern)
-
-    console.log chalk.yellow("running glob for #{pattern}") if debug
-
-    files = []
-    filenamePatterns = []
-
-    # perf: try to cull the list of routes here to only ones that can match the pattern.
-    # this is not trivial, so I'm putting it off for now. right now, an array of every
-    # single file in the tree (virtual + real) will be visited.
-    for route, handler of @routes
-      if route.indexOf("*") == -1
-        files.push(handler._expandedRoute)
-      else
-        if handler.glob
-          files.push(handler.glob())
-        else
-          if handler.tryStatic
-            files.push new Promise (resolve, reject) ->
-              glob route, (err, files) ->
-                if err
-                  reject(err)
-                else
-                  resolve(files)
-
-          if handler._filenamePattern
-            filenamePatterns.push([handler._filenamePatternRegexes, handler._reverseFilenames])
-
-    assertIterationDepth = _.after 10, ->
-      throw new Error("Grump: glob() filename patterns generated new files more than 10 times")
-
-    addFilenamePatterns = (files) ->
-      assertIterationDepth()
-      newFiles = []
-
-      for file in files
-        for [regexes, replacements] in filenamePatterns
-          for regex in regexes
-            if regex.test(file)
-              for replacement in replacements
-                newFiles.push(file.replace(regex, replacement))
-              break
-
-      if newFiles.length
-        # if we generated new files, these could cause newer filenames to be
-        # generated, so we call ourselves here recursively until done.
-        files.push(addFilenamePatterns(newFiles)...)
-
-      return files
-
-    Promise.all(files)
-      .then(_.flatten)
-      .then (files) ->
-        if filenamePatterns.length
-          addFilenamePatterns(files)
-        else
-          files
-      .then (files) ->
-        _.uniq(files.filter(matcher))
 
   run: (handler, filename) ->
     grump = @

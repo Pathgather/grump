@@ -285,16 +285,20 @@ describe "Grump", ->
       expect(grump.glob("**")).toResolveWith(pathResolve("images/hello.png", "hello.js", "hello.coffee"), done)
 
     it "should call glob to get file list", (done) ->
+      imgSpy = jasmine.createSpy("image glob").and.callFake -> pathResolve("images/hello.png", "images/bye.bmp")
+      scriptSpy = jasmine.createSpy("script glob").and.callFake -> Promise.resolve(pathResolve("scripts/hello.coffee", "scripts/bye.js"))
       grump = new Grump
         routes:
           "images/*":
-            glob: -> pathResolve("images/hello.png", "images/bye.bmp")
+            glob: imgSpy
             handler: handler
           "scripts/*":
-            glob: -> Promise.resolve(pathResolve("scripts/hello.coffee", "scripts/bye.js"))
+            glob: scriptSpy
             handler: handler
 
       expect(grump.glob("**/hello.*")).toResolveWith(pathResolve("images/hello.png", "scripts/hello.coffee"), done)
+      expect(imgSpy).toHaveBeenCalledWith(pathResolve("images/hello.*")...)
+      expect(scriptSpy).toHaveBeenCalledWith(pathResolve("scripts/hello.*")...)
 
     it "should use filename to transform matches recursively", (done) ->
       grump = new Grump
@@ -325,11 +329,24 @@ describe "Grump", ->
         expect(err).toEqual(jasmine.any(Error))
         expect(err.message).toMatch(/filename patterns generated new files more than/)
 
+    xit "should recursively intersect the glob when matching handler filenames", (done) ->
+      grump = new Grump
+        routes:
+          "src/files/{a,b}.coffee": handler
+          "**/*.js":
+            filename: "$1/$2.coffee"
+            handler: handler
+
+      spyOn(grump, "glob").and.callThrough()
+
+      expect(grump.glob("src/files/*.js")).toResolveWith(pathResolve("src/files/a.js", "src/files/b.js"), done)
+      expect(grump.glob).toHaveBeenCalledWith(pathResolve("src/files/*.coffee")[0], jasmine.Any(Object))
+
     it "should use glob for tryStatic handlers", (done) ->
       glob = jasmine.createSpy("glob").and.callFake (pat, cb) ->
-          cb(null, pathResolve('hello.coffee', 'bye.coffee'))
+        cb(null, pathResolve('hello.coffee', 'bye.coffee'))
 
-      Grump = proxyquire("../lib/grump", {glob})
+      Grump = proxyquire("../lib/grump", "./grump_glob": proxyquire("../lib/grump_glob", {glob}))
       grump = new Grump
         routes:
           "*.coffee": Grump.StaticHandler()

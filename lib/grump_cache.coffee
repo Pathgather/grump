@@ -2,6 +2,8 @@ _      = require("underscore")
 chalk  = require("chalk")
 events = require("events")
 
+debug = false
+
 module.exports = class GrumpCache extends events.EventEmitter
   constructor: ->
     super
@@ -12,7 +14,7 @@ module.exports = class GrumpCache extends events.EventEmitter
   _expire: (key, entry) ->
     delete @_cache[key]
     @emit("expired", key, entry)
-    console.log chalk.cyan("expired"), key
+    console.log chalk.cyan("expired"), key if debug
     return false
 
   # an entry is current (not stale) if:

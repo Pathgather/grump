@@ -19,6 +19,7 @@
     "detective": "^4.2.0",
     "es6-promise": "^3.0.2",
     "glob": "^5.0.14",
+    "glob-intersection": "^0.1.0",
     "haml-coffee": "^1.14.1",
     "minimatch": "2.0.10",
     "pretty-hrtime": "^1.0.0",
