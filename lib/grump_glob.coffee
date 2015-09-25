@@ -7,24 +7,18 @@ path      = require("path")
 
 debug = false
 
-module.exports = (pattern, options = {}) ->
+glob_helper = (pattern, routes, visited_patterns) ->
+  console.log chalk.yellow("running glob for #{pattern}"), {visited_patterns} if debug
 
-  if options.maxDepth?
-    if options.maxDepth == 0
-      return Promise.reject(new Error("Grump: glob() filename patterns generated new files more than maxDepth times"))
-    else
-      maxDepth = options.maxDepth - 1
-  else
-    maxDepth = 9
-
-  pattern = path.join(@root, pattern) unless path.isAbsolute(pattern)
   matcher = minimatch.filter(pattern)
-
-  console.log chalk.yellow("running glob for #{pattern}"), options if debug
-
   files = []
 
-  for route, handler of @routes
+  if visited_patterns[pattern]
+    return Promise.resolve(files)
+  else
+    visited_patterns[pattern] = true
+
+  for route, handler of routes
 
     # static pattern matching is fast enough, so just add these to the result list
     if route.indexOf("*") == -1
@@ -54,7 +48,7 @@ module.exports = (pattern, options = {}) ->
           console.log "this has filename pattern", handler._filenamePattern, handler._filenamePatternRegexes, handler._reverseFilenames if debug
 
           do (handler) =>
-            files.push @glob(handler._filenamePattern, {maxDepth}).then (files) ->
+            files.push glob_helper(handler._filenamePattern, routes, visited_patterns).then (files) ->
               newFiles = []
 
               for file in files
@@ -72,3 +66,6 @@ module.exports = (pattern, options = {}) ->
     .then(_.flatten)
     .then (files) ->
       _.uniq(files.filter(matcher))
+
+module.exports = (pattern) ->
+  glob_helper.call(@, path.join(@root, pattern), @routes, {})
