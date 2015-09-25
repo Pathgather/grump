@@ -10,9 +10,8 @@
     "node": ">=0.12"
   },
   "author": "Guntars Asmanis-Graham <guntars@pathgather.com>",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
-    "browserify": "^11.0.0",
     "chalk": "^1.1.1",
     "coffee-script": "^1.9.3",
     "concat-stream": "^1.5.0",
@@ -20,7 +19,6 @@
     "es6-promise": "^3.0.2",
     "glob": "^5.0.14",
     "glob-intersection": "^0.1.0",
-    "haml-coffee": "^1.14.1",
     "minimatch": "2.0.10",
     "pretty-hrtime": "^1.0.0",
     "promise.prototype.finally": "^1.0.1",
@@ -29,11 +27,14 @@
     "sync": "^0.2.5",
     "through2": "^2.0.0",
     "underscore": "^1.8.3",
-    "uniq": "^1.0.1",
     "vinyl": "^0.5.1"
   },
   "devDependencies": {
     "jasmine": "^2.3.2",
     "proxyquire": "^1.7.0"
+  },
+  "peerDependencies": {
+    "browserify": "^11.0.0",
+    "haml-coffee": "^1.14.1"
   }
 }
