@@ -148,6 +148,14 @@ class GrumpFS
     else
       fs.stat(arguments...)
 
+  statSync: (filename) =>
+    if @_grump.__bypassSync
+      return GrumpFS.LoggingFS.statSync(arguments...)
+
+    console.log chalk.gray("statSync"), arguments[0] if debug
+    @_assertInFiber()
+    @stat.sync(null, filename)
+
   lstat: =>
     @stat(arguments...)
 
@@ -158,7 +166,7 @@ for func of fs
   if typeof fs[func] == "function"
     do (func) ->
       GrumpFS.LoggingFS[func] = ->
-        console.log chalk.red(func), arguments[0] if debug
+        console.log chalk.red(func), arguments[0]
         fs[func](arguments...)
 
 # extend GrumpFS with the logging functions for the time being
