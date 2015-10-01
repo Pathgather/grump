@@ -69,6 +69,29 @@ describe "Grump", ->
     options.routes["**"] = {handler}
     new Grump(options).get("hello").then(done, fail)
 
+  describe "with debug option", ->
+    beforeEach ->
+      spyOn(console, "log").and.callThrough()
+      options.debug = true
+      grump = new Grump(options)
+
+    it "should log calls to get", (done) ->
+      grump.get("hello").then ->
+        expect(console.log).toHaveBeenCalled()
+        done()
+
+    it "should log calls to GrumpFS", (done) ->
+      # try to read a file that's not in the grump root so we just
+      # generate a log from grumpfs and not grump itself
+      grump.fs.readFile "../../hello", ->
+        expect(console.log).toHaveBeenCalled()
+        done()
+
+    it "should log calls to glob", (done) ->
+      grump.glob("hel*").then ->
+        expect(console.log).toHaveBeenCalled()
+        done()
+
   describe "tryStatic", ->
     fakeFS = null
 

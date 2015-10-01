@@ -14,8 +14,6 @@ GrumpFS    = require("./grumpfs")
 handlers   = require("./handlers")
 util       = require("./util")
 
-debug = false
-
 # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/flags
 if RegExp.prototype.flags == undefined
   Object.defineProperty RegExp.prototype, 'flags',
@@ -68,7 +66,7 @@ assertValidFilename = (route, filename) ->
   if route.split(/\*+/g).length != filename.split(/\$\d+/).length
     throw new Error("Grump: mismatched filename option '#{filename}' for route '#{route}'")
 
-resolveCacheEntry = (promise, cache_entry, filename) ->
+resolveCacheEntry = (promise, cache_entry, filename, debug = false) ->
   ok = (result) ->
     console.log chalk.gray("cache save for"), filename if debug
     cache_entry.at = new Date()
@@ -98,6 +96,7 @@ class Grump
 
     @minimatch_opts = config.minimatch || {}
     @root = fs.realpathSync(config.root || ".")
+    @debug = (config.debug == true)
 
     @routes = {}
     for route, handler of config.routes || {}
@@ -129,10 +128,14 @@ class Grump
 
       @routes[route] = handler
 
-    if Object.keys(@routes).length == 0 and debug
+    if Object.keys(@routes).length == 0 and @debug
       console.log "Grump: no routes were defined, Grump is not going to be very useful"
 
     @cache = new GrumpCache()
+    @cache.on "expire", (key) =>
+      console.log chalk.cyan("expired"), key if @debug
+
+    return
 
   glob: require("./grump_glob")
   require: require("./grump_require")
@@ -178,14 +181,14 @@ class Grump
       result = cache_entry.result
 
       if cache_entry.rejected == null and result and typeof result.then == "function"
-        console.log chalk.green("cache hit for"), chalk.yellow("promise"), filename if debug
+        console.log chalk.green("cache hit for"), chalk.yellow("promise"), filename if @debug
         return result
       else if @cache.current(filename)
         if cache_entry.rejected == false
-          console.log chalk.green("cache hit for"), filename if debug
+          console.log chalk.green("cache hit for"), filename if @debug
           return Promise.resolve(result)
         else if cache_entry.rejected == true
-          console.log chalk.green("cache hit for"), chalk.red("error"), filename if debug
+          console.log chalk.green("cache hit for"), chalk.red("error"), filename if @debug
           return Promise.reject(result)
 
     cache_entry = @cache.init(filename)
@@ -197,7 +200,7 @@ class Grump
 
     promise = if handler
       tryHandler = =>
-        console.log chalk.yellow("running handler for #{filename}") if debug
+        console.log chalk.yellow("running handler for #{filename}") if @debug
 
         # create a new grump with attached cache_entry
         if @hasOwnProperty("_parent_entry")
@@ -239,7 +242,7 @@ class Grump
     else
       Promise.reject(new Error("Grump: no handler matched for #{filename}"))
 
-    return resolveCacheEntry(promise, cache_entry, filename)
+    return resolveCacheEntry(promise, cache_entry, filename, @debug)
 
   getSync: (filename) ->
     if not Sync.Fibers.current

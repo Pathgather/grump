@@ -5,9 +5,7 @@ intersect = require("glob-intersection")
 minimatch = require("minimatch")
 path      = require("path")
 
-debug = false
-
-glob_helper = (pattern, routes, visited_patterns) ->
+glob_helper = (pattern, routes, visited_patterns, debug) ->
   console.log chalk.yellow("running glob for #{pattern}"), {visited_patterns} if debug
 
   matcher = minimatch.filter(pattern)
@@ -68,4 +66,4 @@ glob_helper = (pattern, routes, visited_patterns) ->
       _.uniq(files.filter(matcher))
 
 module.exports = (pattern) ->
-  glob_helper.call(@, path.join(@root, pattern), @routes, {})
+  glob_helper.call(@, path.join(@root, pattern), @routes, {}, @debug)
