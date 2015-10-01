@@ -104,6 +104,8 @@ class GrumpFS
       if typeof options == "function"
         cb = options
         options = null
+      else if typeof options == "string"
+        options = encoding: options
 
       onResult = (result) ->
         if options?.encoding

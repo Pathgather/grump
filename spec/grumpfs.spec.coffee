@@ -49,14 +49,20 @@ describe "Grump.fs", ->
         expect(err).toBe("my error")
         done()
 
-    describe "with encoding option", ->
+    describe "with options", ->
       beforeEach (done) ->
         fs.readFile "hello_buf", (err, file) ->
           expect(file instanceof Buffer).toBe(true)
           done()
 
-      it "should return a string", (done) ->
+      it "should return a string when encoding: xxx", (done) ->
         fs.readFile "hello_buf", encoding: "utf8", (err, file) ->
+          expect(typeof file).toBe("string")
+          expect(file).toBe("hello world")
+          done()
+
+      it "should return a string when options is a string", (done) ->
+        fs.readFile "hello_buf", "utf8", (err, file) ->
           expect(typeof file).toBe("string")
           expect(file).toBe("hello world")
           done()
@@ -100,6 +106,12 @@ describe "Grump.fs", ->
       inSync fail, ->
         expect(fs.readFileSync("hello_buf") instanceof Buffer).toBe(true)
         expect(typeof fs.readFileSync("hello_buf", encoding: "utf8")).toBe("string")
+        done()
+
+    it "should honor encoding option when passed as a string", (done) ->
+      inSync fail, ->
+        expect(fs.readFileSync("hello_buf") instanceof Buffer).toBe(true)
+        expect(typeof fs.readFileSync("hello_buf", "utf8")).toBe("string")
         done()
 
     it "should throw an error", (done) ->
