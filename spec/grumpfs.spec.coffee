@@ -9,6 +9,7 @@ inSync = (fail, fn) ->
 
 files =
   "hello": -> Promise.resolve("contents")
+  "hello_buf": -> Promise.resolve(new Buffer("hello world"))
   "hello_error": -> Promise.reject("my error")
   "../hello": (cb) -> cb(null, "contents")
   "../hello_error": (cb) -> cb("my error")
@@ -48,6 +49,18 @@ describe "Grump.fs", ->
         expect(err).toBe("my error")
         done()
 
+    describe "with encoding option", ->
+      beforeEach (done) ->
+        fs.readFile "hello_buf", (err, file) ->
+          expect(file instanceof Buffer).toBe(true)
+          done()
+
+      it "should return a string", (done) ->
+        fs.readFile "hello_buf", encoding: "utf8", (err, file) ->
+          expect(typeof file).toBe("string")
+          expect(file).toBe("hello world")
+          done()
+
     describe "with filename outside root", ->
       it "should not call handler", (done) ->
         @ret = fs.readFile "../hello", (err, file) ->
@@ -81,6 +94,12 @@ describe "Grump.fs", ->
     it "should return contents", (done) ->
       inSync fail, ->
         expect(fs.readFileSync("hello")).toBe("contents")
+        done()
+
+    it "should honor encoding option", (done) ->
+      inSync fail, ->
+        expect(fs.readFileSync("hello_buf") instanceof Buffer).toBe(true)
+        expect(typeof fs.readFileSync("hello_buf", encoding: "utf8")).toBe("string")
         done()
 
     it "should throw an error", (done) ->

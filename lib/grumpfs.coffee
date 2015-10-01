@@ -34,14 +34,6 @@ startsWith = (str, needle) ->
 class GrumpFS
   constructor: (@_grump) ->
 
-  _grumpGet: (filename, cb) ->
-    onResult = (result) -> cb(null, result)
-
-    @_grump.get(filename)
-      .then(onResult, cb)
-
-    return
-
   _isRooted: (filename) ->
     if not path.isAbsolute(filename) or filename.indexOf("../") >= 0
       absFilename = path.resolve(@_grump.root, filename)
@@ -108,7 +100,26 @@ class GrumpFS
     console.log chalk.gray("readFile"), arguments[0] if debug
 
     if @_isRooted(filename)
-      @_grumpGet(filename, cb || options)
+
+      if typeof options == "function"
+        cb = options
+        options = null
+
+      onResult = (result) ->
+        if options?.encoding
+          result = result.toString(options?.encoding)
+
+        process.nextTick ->
+          cb(null, result)
+
+      onError = (err) ->
+        process.nextTick ->
+          cb(err)
+
+      @_grump.get(filename).then(onResult, onError)
+
+      return
+
     else
       fs.readFile(arguments...)
 
