@@ -138,7 +138,7 @@ describe "Grump", ->
               done()
           .catch(fail)
 
-      it "should call handler when dep is expired", (done) ->
+      xit "should call handler when dep is expired", (done) ->
         @mtime.and.returnValue(new Date(getEntry("hello").at.getTime() + 150))
 
         @grump.get("hello_as_dep").then =>
