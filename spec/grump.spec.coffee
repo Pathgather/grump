@@ -71,26 +71,24 @@ describe "Grump", ->
 
   describe "with debug option", ->
     beforeEach ->
-      spyOn(console, "log").and.callThrough()
+      spyOn(console, "log")
       options.debug = true
       grump = new Grump(options)
+      expect(console.log).not.toHaveBeenCalled()
+
+    afterEach ->
+      expect(console.log).toHaveBeenCalled()
 
     it "should log calls to get", (done) ->
-      grump.get("hello").then ->
-        expect(console.log).toHaveBeenCalled()
-        done()
+      grump.get("hello").then(done)
 
     it "should log calls to GrumpFS", (done) ->
       # try to read a file that's not in the grump root so we just
       # generate a log from grumpfs and not grump itself
-      grump.fs.readFile "../../hello", ->
-        expect(console.log).toHaveBeenCalled()
-        done()
+      grump.fs.readFile("../../hello", done)
 
     it "should log calls to glob", (done) ->
-      grump.glob("hel*").then ->
-        expect(console.log).toHaveBeenCalled()
-        done()
+      grump.glob("hel*").then(done)
 
   describe "tryStatic", ->
     fakeFS = null
