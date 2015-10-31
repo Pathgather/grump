@@ -24,7 +24,7 @@ glob_helper = (pattern, routes, visited_patterns, debug) ->
     else
 
       intersected_pattern = intersect(pattern, route)
-      console.log chalk.green("glob-intersect(#{route}): #{intersected_pattern}") if debug
+      console.log chalk[intersected_pattern && "green" || "gray"]("glob-intersect(#{route}): #{intersected_pattern}") if debug
 
       if intersected_pattern == false
         continue
@@ -46,7 +46,7 @@ glob_helper = (pattern, routes, visited_patterns, debug) ->
           console.log "this has filename pattern", handler._filenamePattern, handler._filenamePatternRegexes, handler._reverseFilenames if debug
 
           do (handler) =>
-            files.push glob_helper(handler._filenamePattern, routes, visited_patterns).then (files) ->
+            files.push glob_helper(handler._filenamePattern, routes, visited_patterns, debug).then (files) ->
               newFiles = []
 
               for file in files
