@@ -13,13 +13,7 @@ GrumpCache = require("./grump_cache")
 GrumpFS    = require("./grumpfs")
 handlers   = require("./handlers")
 util       = require("./util")
-
-# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/flags
-if RegExp.prototype.flags == undefined
-  Object.defineProperty RegExp.prototype, 'flags',
-    configurable: true,
-    get: -> this.toString().match(/[gimuy]*$/)[0]
-
+SourceFilename = require("./source_filename")
 
 tryStatic = (filename, cache_entry, options = {}) ->
   cache_entry.mtime = Grump.mtime
@@ -30,41 +24,6 @@ tryStatic = (filename, cache_entry, options = {}) ->
         reject(err)
       else
         resolve(result)
-
-# take a minimatch pattern and compile it to an array of regexes with capturing groups
-makeCapturingRegexes = (pattern) ->
-  # patterns used by minimatch for * and **. these can clearly change at any
-  # time, so it's a good idea to keep minimatch locked and spec everything.
-  qmark        = '[^/]'
-  star         = qmark + '*?'
-  twoStarDot   = '(?:(?!(?:\\\/|^)(?:\\.{1,2})($|\\\/)).)*?'
-  twoStarNoDot = '(?:(?!(?:\\\/|^)\\.).)*?'
-
-  makeRe = (pattern) ->
-    if regex = minimatch.makeRe(pattern)
-      addCapturingGroups = (str, pat) ->
-        str.replace(pat, "(" + pat + ")")
-
-      reSrc = [star, twoStarDot, twoStarNoDot].reduce(addCapturingGroups, regex.source)
-      new RegExp(reSrc, regex.flags)
-
-  minimatch.braceExpand(pattern).map(makeRe).filter(_.identity)
-
-makeFilenamePattern = (route, filename) ->
-  globs = route.match(/(\*+)/g)
-  filename.replace /\$\d+/g, (match) ->
-    globs[parseInt(match.slice(1)) - 1]
-
-makeReverseFilenames = (route, filename) ->
-  for route in minimatch.braceExpand(route)
-    submatches = filename.match(/\$\d+/g)
-    i = 0
-    route.replace /\*+/g, (match) ->
-      submatches[i++]
-
-assertValidFilename = (route, filename) ->
-  if route.split(/\*+/g).length != filename.split(/\$\d+/).length
-    throw new Error("Grump: mismatched filename option '#{filename}' for route '#{route}'")
 
 resolveCacheEntry = (promise, cache_entry, filename, debug = false) ->
   ok = (result) ->
@@ -114,17 +73,8 @@ class Grump
       if handler.glob and typeof handler.glob != "function"
         throw new Error("Grump: glob option should be a function that returns all absolute paths matching the route")
 
-      if handler.filename
-        handler.filename = path.join(@root, handler.filename)
-        assertValidFilename(route, handler.filename)
-        handler._capturingRegexes = makeCapturingRegexes(route)
-
-        # filenamePattern is used to match potential input files
-        handler._filenamePattern = makeFilenamePattern(route, handler.filename)
-        handler._filenamePatternRegexes = makeCapturingRegexes(handler._filenamePattern)
-
-        # reverseFilename is used to generate output filenames from matched inputs
-        handler._reverseFilenames = makeReverseFilenames(route, handler.filename)
+      if handler.sources?
+        handler.sources = new SourceFilename(route, path.join(@root, handler.sources))
 
       @routes[route] = handler
 
@@ -208,23 +158,8 @@ class Grump
         else
           grump = Object.create(@)
 
-        # if we have a filename option on the handler, use it to transform the
-        # the request filename using String.replace
-        if handler.filename
-          for regex in handler._capturingRegexes
-            if regex.test(filename)
-              reqFilename = filename.replace(regex, handler.filename)
-              break
-
-          if not reqFilename?
-            # TODO: this is a known bug with patterns like /**/*.js and filename like /hello.js
-            # normal minimatch will be ok with it, but our capturing regexes seem to miss it.
-            throw new Error("Grump: the route '#{route}' in regex form didn't match #{filename}")
-        else
-          reqFilename = filename
-
         grump._parent_entry = cache_entry
-        return grump.run(handler.handler, reqFilename)
+        return grump.run(handler, filename)
 
       if handler.tryStatic == "before"
         # try reading the file from the file system and only try the handler
@@ -252,15 +187,22 @@ class Grump
     util.syncPromise(promise)
 
   run: (handler, filename) ->
-    grump = @
+    ctx = {
+      filename: filename
+      grump: @
+    }
+
+    if handler.sources
+      ctx.sources = minimatch.braceExpand(handler.sources.toSource(filename))
+
     new Promise (resolve, reject) ->
       Sync ->
         try
-          resolve(handler({filename, grump}))
+          resolve(handler.handler(ctx))
         catch err
           reject(err)
 
-# handlers to the Grump object
+# add handlers to the Grump object
 _.extend(Grump, handlers)
 
 Grump.GrumpFS  = GrumpFS

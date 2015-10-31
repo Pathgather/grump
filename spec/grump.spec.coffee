@@ -174,66 +174,65 @@ describe "Grump", ->
             expect(error).toBe(problem)
             done()
 
-    describe "when used with tryStatic", ->
+    describe "when used with sources", ->
       beforeEach ->
         options.routes =
           "*.js":
             tryStatic: true
-            filename: "$1.coffee"
+            sources: "$1.coffee"
             handler: handler
 
         grump = new Grump(options)
 
-      it "should try filename with original filename", (done) ->
+      it "should try to read the request filename", (done) ->
         expect(grump.get("hello.js")).toResolve done, ->
           expect(fakeFS.readFile).toHaveBeenCalledWith(path.resolve("hello.js"),
             jasmine.any(Object),
             jasmine.any(Function))
-          expect(handler).toHaveBeenCalledWith(jasmine.objectContaining(filename: path.resolve("hello.coffee")))
+          expect(handler).toHaveBeenCalledWith(jasmine.objectContaining(filename: path.resolve("hello.js"), sources: [path.resolve("hello.coffee")]))
 
-  describe "filename", ->
+  describe "sources", ->
 
-    handledFilename = null
+    handledSources = null
 
     routes =
       "/lib/*.{coffee,js}": "lib/$1.js?compile"
-      "/*.bundle.js": "src/$1/index.js"
-      "*.coffee": "$1.js"
+      "src/*.html": "templates/$1.{haml,hamlc}"
       "src/**": "scripts/$1"
-      "static/**/*.png": "$1/$2"
+      "static/**/*.png": "a/$1b/$2.png"
 
     tests =
-      "lib/hello.js": "lib/hello.js?compile"
-      "lib/hello.coffee": "lib/hello.js?compile"
-      "hello.coffee": "hello.js"
-      "grump.bundle.js": "src/grump/index.js"
-      "src/hello": "scripts/hello"
-      "src/hello/world": "scripts/hello/world"
-      # "/static/womp.png": "/womp.png"
-      "static/main/index.png": "main/index"
-      "static/.tmp/hello.png": ".tmp/hello"
+      "lib/hello.js": ["lib/hello.js?compile"]
+      "lib/hello.coffee": ["lib/hello.js?compile"]
+      "src/index.html": ["templates/index.haml", "templates/index.hamlc"]
+      "src/hello": ["scripts/hello"]
+      "src/hello/world": ["scripts/hello/world"]
+      "static/womp.png": ["a/b/womp.png"]
+      "static/main/index.png": ["a/main/b/index.png"]
+      "static/.tmp/hello.png": ["a/.tmp/b/hello.png"]
 
     beforeEach ->
-      handledFilename = null
+      handledSources = null
       handler = jasmine.createSpy("handler").and.callFake (ctx) ->
-        handledFilename = ctx.filename
+        handledSources = ctx.sources
 
       options =
         minimatch: dot: true
         routes: {}
 
-      for route, filename of routes
-        options.routes[route] = {filename, handler}
+      for route, sources of routes
+        options.routes[route] = {sources, handler}
 
       root = process.cwd()
       grump = new Grump(options)
 
-    for reqFilename, expectedFilename of tests
-      do (reqFilename, expectedFilename) ->
+    for reqFilename, expectedSources of tests
+      do (reqFilename, expectedSources) ->
         it "should handle #{reqFilename}", (done) ->
           grump.get(reqFilename)
             .then ->
-              expect(handledFilename).toBe(path.resolve(expectedFilename))
+              expected = expectedSources.map (src) -> path.resolve(src)
+              expect(handledSources).toEqual(expected)
               done()
             .catch(fail)
 
@@ -317,24 +316,24 @@ describe "Grump", ->
             glob: scriptSpy
             handler: handler
 
-      expect(grump.glob("**/hello.*")).toResolveWith(pathResolve("images/hello.png", "scripts/hello.coffee"), done)
+      expect(grump.glob("{images,scripts}/hello.*")).toResolveWith(pathResolve("images/hello.png", "scripts/hello.coffee"), done)
       expect(imgSpy).toHaveBeenCalledWith(pathResolve("images/hello.*")...)
       expect(scriptSpy).toHaveBeenCalledWith(pathResolve("scripts/hello.*")...)
 
-    it "should use filename to transform matches recursively", (done) ->
+    it "should use sources options to transform matches recursively", (done) ->
       grump = new Grump
         routes:
           "src/{a,b,c}.coffee": handler
           "app/*.{bundle,bundlez}":
-            filename: "src/$1.coffee"
+            sources: "src/$1.coffee"
             handler: handler
           "*.js":
-            filename: "app/$1.bundle"
+            sources: "app/$1.bundle"
             handler: handler
 
       expect(grump.glob("*.js")).toResolveWith(pathResolve("a.js", "b.js", "c.js"), done)
 
-    xit "should blow up when filenames would cause infinite recursion", (done) ->
+    it "should not blow up when sources option would cause infinite recursion", (done) ->
       grump = new Grump
         routes:
           "hello.coffee":
@@ -346,22 +345,22 @@ describe "Grump", ->
             filename: "$1.coffee"
             handler: handler
 
-      expect(grump.glob("*")).toReject done, (err) ->
-        expect(err).toEqual(jasmine.any(Error))
-        expect(err.message).toMatch(/filename patterns generated new files more than/)
+      expect(grump.glob("*")).toResolveWith(pathResolve("hello.coffee"), done)
 
-    xit "should recursively intersect the glob when matching handler filenames", (done) ->
+    it "should recursively intersect the glob when matching handler filenames", (done) ->
       grump = new Grump
+        debug: true
         routes:
           "src/files/{a,b}.coffee": handler
           "**/*.js":
-            filename: "$1/$2.coffee"
+            sources: "$1/$2.coffee"
             handler: handler
 
-      spyOn(grump, "glob").and.callThrough()
+      # hijack console.log to track if glob_helper was called with proper arguments
+      spyOn(console, "log").and.returnValue(undefined)
 
       expect(grump.glob("src/files/*.js")).toResolveWith(pathResolve("src/files/a.js", "src/files/b.js"), done)
-      expect(grump.glob).toHaveBeenCalledWith(pathResolve("src/files/*.coffee")[0], jasmine.Any(Object))
+      expect(console.log.calls.first().args[0].indexOf("src/files/*.js")).not.toBe(-1)
 
     it "should use glob for tryStatic handlers", (done) ->
       glob = jasmine.createSpy("glob").and.callFake (pat, cb) ->
@@ -372,7 +371,7 @@ describe "Grump", ->
         routes:
           "*.coffee": Grump.StaticHandler()
           "*.js":
-            filename: "$1.coffee"
+            sources: "$1.coffee"
             handler: handler
 
       expect(grump.glob("*.js")).toResolve done, (files) ->

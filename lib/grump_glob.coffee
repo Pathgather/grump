@@ -42,21 +42,13 @@ glob_helper = (pattern, routes, visited_patterns, debug) ->
               else
                 resolve(files)
 
-        if handler._filenamePattern
-          console.log "this has filename pattern", handler._filenamePattern, handler._filenamePatternRegexes, handler._reverseFilenames if debug
+        if handler.sources
+          console.log "has sources option", handler.sources if debug
 
-          do (handler) =>
-            files.push glob_helper(handler._filenamePattern, routes, visited_patterns, debug).then (files) ->
-              newFiles = []
-
-              for file in files
-                for regex in handler._filenamePatternRegexes
-                  if regex.test(file)
-                    for replacement in handler._reverseFilenames
-                      newFiles.push(file.replace(regex, replacement))
-                    break
-
-              return newFiles
+          do (handler) ->
+            # do a recursive glob for sources that can generate filenames matching intersected_pattern
+            files.push glob_helper(handler.sources.toSource(intersected_pattern), routes, visited_patterns, debug).then (files) ->
+              return _.flatten((minimatch.braceExpand(handler.sources.toFilename(file)) for file in files))
 
   console.log require("util").inspect({files}, false, null, true) if debug
 
