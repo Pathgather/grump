@@ -243,7 +243,7 @@ describe "Grump", ->
     it "should call the handler", (done) ->
       grump.get("hello")
         .then (result) ->
-          expect(handler).toHaveBeenCalledWith({filename: path.resolve("hello"), grump: jasmine.any(Grump)})
+          expect(handler).toHaveBeenCalledWith({filename: path.resolve("hello"), grump: jasmine.any(Grump), sources: jasmine.any(Array)})
           done()
         .catch(fail)
 

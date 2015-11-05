@@ -198,6 +198,8 @@ class Grump
 
     if handler.sources
       ctx.sources = minimatch.braceExpand(handler.sources.toSource(filename))
+    else
+      ctx.sources = []
 
     new Promise (resolve, reject) ->
       Sync ->

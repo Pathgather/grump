@@ -1,18 +1,19 @@
 _       = require("underscore")
 chalk   = require("chalk")
+coffee  = require("coffee-script")
+concat  = require('concat-stream')
 fs      = require("fs")
 path    = require("path")
-concat  = require('concat-stream')
-coffee  = require("coffee-script")
+sass    = require("node-sass")
+Sync    = require("sync")
 through = require('through2')
 util    = require("./util")
-Sync    = require("sync")
 
 debug = false
 
 CoffeeHandler = (options = {}) ->
-  return ({filename, grump}) ->
-    filename = filename.replace(/\.js(\?.*)?$/, ".coffee")
+  return ({filename, grump, sources}) ->
+    filename = sources[0] || filename.replace(/\.js(\?.*)?$/, ".coffee")
     grump.get(filename).then (source) ->
       coffee.compile(source.toString(), _.extend({}, options, {filename}))
 
@@ -31,7 +32,7 @@ GulpHandler = (options = {}) ->
         else if _.isArray(options.files)
           files = options.files
         else
-          files = [ctx.filename]
+          files = ctx.sources
 
         transform = util.syncPromise(options.transform(ctx))
         transform.on("error", reject)
@@ -88,6 +89,37 @@ StaticHandler = ->
       path: ctx.filename
     throw err
 
+SassHandler = ({includePaths}) ->
+  ({filename, grump, sources}) ->
+    grump.get(sources[0]).then (result) ->
+      new Promise (resolve, reject) ->
+
+        sass_opts =
+          file: sources[0]
+          data: result.toString()
+          includePaths: includePaths || []
+
+        sass.render sass_opts, (err, result) ->
+          if err
+            reject(err)
+
+            # SUPER HACK: clear out the errorred cache entry as it could be caused by one of the deps
+            # that we didn't have a chance to track yet.
+            do expire = ->
+              process.nextTick ->
+                entry = grump.cache.get(filename)
+                if entry.rejected
+                  grump.cache._expire(filename, entry)
+                else
+                  expire()
+
+          else
+            try
+              grump.dep(dep) for dep in result.stats.includedFiles
+              resolve(result.css.toString())
+            catch err
+              reject(err)
+
 BrowserifyHandler = (options = {}) ->
   options = _.extend {}, options,
     cache: {} # shared between all bundles
@@ -108,7 +140,7 @@ BrowserifyHandler = (options = {}) ->
       else if _.isArray(options.files)
         files = options.files
       else
-        files = [ctx.filename]
+        files = ctx.sources
 
       browserify = ctx.grump.require("browserify", module)
       bundle = browserify([], options)
@@ -145,4 +177,4 @@ BrowserifyHandler = (options = {}) ->
 
           if err then reject(err) else resolve(body)
 
-module.exports = {CoffeeHandler, GulpHandler, HamlHandler, StaticHandler, BrowserifyHandler}
+module.exports = {CoffeeHandler, GulpHandler, HamlHandler, SassHandler, StaticHandler, BrowserifyHandler}
