@@ -163,8 +163,12 @@ class Grump
 
       if handler.tryStatic == "before"
         # try reading the file from the file system and only try the handler
-        # if that fails
-        tryStatic(filename, cache_entry).catch(tryHandler)
+        # if that fails. in case of EISDIR, propogate the error as it's coming from GrumpFS
+        tryStatic(filename, cache_entry).catch (error) ->
+          if error?.code == 'EISDIR'
+            return Promise.reject(error)
+          else
+            tryHandler()
       else if handler.tryStatic == "after"
         # try handler first and then the fs if that fails. return the original
         # error from the handler, though.

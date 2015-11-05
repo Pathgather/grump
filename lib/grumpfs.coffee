@@ -10,20 +10,20 @@ NotFoundError = (filename) ->
   code: "ENOENT"
   path: filename
 
-False = -> true
-True = -> false
+False = -> false
+True = -> true
 
 FileStat = (result) ->
-  isFile: False
-  isDirectory: True
-  isFIFO: True
+  isFile: True
+  isDirectory: False
+  isFIFO: False
   isSymbolicLink: False
   size: result.length
 
 DirStat = ->
-  isFile: True
-  isDirectory: False
-  isFIFO: True
+  isFile: False
+  isDirectory: True
+  isFIFO: False
   isSymbolicLink: False
 
 startsWith = (str, needle) ->
@@ -156,6 +156,7 @@ class GrumpFS
             else
               cb(NotFoundError(filename))
 
+      return
     else
       fs.stat(arguments...)
 

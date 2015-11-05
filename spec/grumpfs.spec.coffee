@@ -1,4 +1,5 @@
-Sync       = require("sync")
+Sync  = require("sync")
+Grump = require("../lib/grump")
 
 inSync = (fail, fn) ->
   Sync ->
@@ -130,4 +131,36 @@ describe "Grump.fs", ->
         inSync fail, ->
           fn = -> fs.readFileSync("../hello_error")
           expect(fn).toThrow()
+          done()
+
+  describe "stat", ->
+    afterEach ->
+      expect(@ret).toBeUndefined()
+
+    it "should call handler", (done) ->
+      @ret = fs.stat "hello", (err, stat) ->
+        expect(grump.get).toHaveBeenCalledWith("hello")
+        done()
+
+    it "should provide stat information", (done) ->
+      @ret = fs.stat "hello", (err, stat) ->
+        expect(err).toBe(null)
+        expect(stat.isDirectory()).toBe(false)
+        expect(stat.isSymbolicLink()).toBe(false)
+        expect(stat.isFile()).toBe(true)
+        expect(stat.size).toBe(8)
+        done()
+
+    describe "with tryStatic", ->
+      it "should work with directories", (done) ->
+        grump = new Grump
+          debug: true
+          routes:
+            "**": Grump.StaticHandler()
+
+        grump.fs.stat "./spec", (err, stat) ->
+          expect(err).toBe(null)
+          expect(stat.isDirectory()).toBe(true)
+          expect(stat.isSymbolicLink()).toBe(false)
+          expect(stat.isFile()).toBe(false)
           done()
