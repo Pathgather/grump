@@ -88,7 +88,7 @@ class GrumpFS
       relative = path.relative(@_grump.root, filename)
       @_grump.glob(path.join(relative, "*"))
         .then (files) ->
-          process.nextTick -> cb(null, files.map(path.basename))
+          process.nextTick -> cb(null, files.map( (file) -> path.basename(file)))
         .catch (err) ->
           process.nextTick -> cb(err)
     else
