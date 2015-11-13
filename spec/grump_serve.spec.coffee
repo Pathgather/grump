@@ -69,6 +69,13 @@ describe "Grump#serve", ->
           expect(-> JSON.parse(buf.toString())).not.toThrow()
           done()
 
+  it "should request index.html when getting /", (done) ->
+    http.get "http://localhost:#{random_port}/", (res) ->
+      read_all res, (buf) ->
+        expect(res.statusCode).toBe(200)
+        expect(buf.toString()).toBe("index")
+        done()
+
   describe "content-types", ->
     types = {
       "__debug": "application/json"

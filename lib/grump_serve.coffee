@@ -58,6 +58,9 @@ module.exports = (options = {}) ->
           result = JSON.stringify(grump.cache, debug_filter, 2)
           headers["Content-Type"] = "application/json"
         else
+          if request_path[request_path.length-1] == "/"
+            request_path += "/index.html"
+
           result = grump.getSync(path.join(root, request_path))
           content_type = guess_content_type(request_path)
           headers["Content-Type"] = content_type if content_type
