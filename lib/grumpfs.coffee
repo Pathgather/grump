@@ -131,6 +131,19 @@ class GrumpFS
     @_assertInFiber()
     @readFile.sync(null, filename, options)
 
+  readlink: (filename, cb) =>
+    console.log chalk.gray("readlink"), arguments[0] if @_grump.debug
+
+    if @_isRooted(filename)
+      onResult = (result) ->
+        process.nextTick -> cb(errno: -22, code: "EINVAL", syscall: "readlink", path: filename)
+      onError = (error) ->
+        process.nextTick -> cb(error)
+
+      @_grump.get(filename).then(onResult, onError)
+    else
+      fs.readlink(arguments...)
+
   realpath: (filename, cache, cb) =>
     console.log chalk.gray("realpath"), arguments[0] if @_grump.debug
 
