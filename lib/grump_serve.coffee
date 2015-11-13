@@ -6,6 +6,13 @@ Sync         = require("sync")
 url          = require("url")
 util         = require("./util")
 
+# Filter for serializing the cache, it ignores the contents
+debug_filter = (prop, obj) ->
+  if prop == "result" and typeof obj == "object" and obj.type == "Buffer"
+    "Buffer(...)"
+  else
+    obj
+
 # Exposed as Grump#serve method, this method starts a web server that serves
 # grump request as well as pretty prints the errors.
 module.exports = (options = {}) ->
@@ -28,7 +35,13 @@ module.exports = (options = {}) ->
 
     Sync ->
       try
-        result = grump.getSync(path.join(root, url.parse(request.url).pathname))
+        request_path = url.parse(request.url).pathname
+
+        if request_path == "/__debug"
+          result = JSON.stringify(grump.cache, debug_filter, 2)
+        else
+          result = grump.getSync(path.join(root, request_path))
+
         code = 200
 
       catch error
