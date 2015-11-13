@@ -8,7 +8,7 @@ util         = require("./util")
 
 # Filter for serializing the cache, it ignores the contents
 debug_filter = (prop, obj) ->
-  if prop == "result" and typeof obj == "object" and obj.type == "Buffer"
+  if prop == "result" and typeof obj == "object" and obj?.type == "Buffer"
     "Buffer(...)"
   else
     obj
