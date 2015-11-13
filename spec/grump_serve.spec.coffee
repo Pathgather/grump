@@ -80,7 +80,7 @@ describe "Grump#serve", ->
     types = {
       "__debug": "application/json"
       "app.js": "application/javascript"
-      "index.html": "application/html"
+      "index.html": "text/html"
       "style.css": "text/css"
       "throws_error": "text/plain"
     }

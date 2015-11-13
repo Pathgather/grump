@@ -15,7 +15,7 @@ debug_filter = (prop, obj) ->
 
 content_types = [
   [/\.css$/, "text/css"]
-  [/\.html$/, "application/html"]
+  [/\.html$/, "text/html"]
   [/\.js$/, "application/javascript"]
 ]
 
