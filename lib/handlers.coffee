@@ -4,7 +4,6 @@ coffee  = require("coffee-script")
 concat  = require('concat-stream')
 fs      = require("fs")
 path    = require("path")
-sass    = require("node-sass")
 Sync    = require("sync")
 through = require('through2')
 util    = require("./util")
@@ -90,7 +89,8 @@ StaticHandler = ->
     throw err
 
 SassHandler = ({includePaths}) ->
-  ({filename, grump, sources}) ->
+  sass = require("node-sass")
+  return ({filename, grump, sources}) ->
     grump.get(sources[0]).then (result) ->
       new Promise (resolve, reject) ->
 
