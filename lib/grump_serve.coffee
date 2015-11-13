@@ -13,6 +13,19 @@ debug_filter = (prop, obj) ->
   else
     obj
 
+content_types = [
+  [/\.css$/, "text/css"]
+  [/\.html$/, "application/html"]
+  [/\.js$/, "application/javascript"]
+]
+
+guess_content_type = (url) ->
+  for [re, mime] in content_types
+    if url.match(re)
+      return mime
+
+  return
+
 # Exposed as Grump#serve method, this method starts a web server that serves
 # grump request as well as pretty prints the errors.
 module.exports = (options = {}) ->
@@ -33,14 +46,21 @@ module.exports = (options = {}) ->
   handler = (request, response) =>
     logRequest(request, response)
 
+    code = null
+    headers = {}
+    result = null
+
     Sync ->
       try
         request_path = url.parse(request.url).pathname
 
         if request_path == "/__debug"
           result = JSON.stringify(grump.cache, debug_filter, 2)
+          headers["Content-Type"] = "application/json"
         else
           result = grump.getSync(path.join(root, request_path))
+          content_type = guess_content_type(request_path)
+          headers["Content-Type"] = content_type if content_type
 
         code = 200
 
@@ -55,7 +75,7 @@ module.exports = (options = {}) ->
         result = stripAnsi(result)
 
         code = if error.code == "ENOENT" then 404 else 500
-        headers = "Content-Type": "text/plain"
+        headers["Content-Type"] = "text/plain"
 
       finally
         response.writeHead(code, headers || {})

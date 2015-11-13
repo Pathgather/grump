@@ -179,7 +179,9 @@ class Grump
         tryHandler()
 
     else
-      Promise.reject(new Error("Grump: no handler matched for #{filename}"))
+      err = new Error("Grump: no handler matched for #{filename}")
+      err.code = "ENOENT"
+      Promise.reject(err)
 
     return resolveCacheEntry(promise, cache_entry, filename, @debug)
 
