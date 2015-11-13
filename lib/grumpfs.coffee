@@ -141,6 +141,8 @@ class GrumpFS
         process.nextTick -> cb(error)
 
       @_grump.get(filename).then(onResult, onError)
+
+      return
     else
       fs.readlink(arguments...)
 

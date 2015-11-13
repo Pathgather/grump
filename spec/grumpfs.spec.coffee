@@ -164,3 +164,20 @@ describe "Grump.fs", ->
           expect(stat.isSymbolicLink()).toBe(false)
           expect(stat.isFile()).toBe(false)
           done()
+
+  describe "readlink", ->
+    afterEach ->
+      expect(@ret).toBeUndefined()
+
+    it "should call handler", (done) ->
+      @ret = fs.readlink "hello", (err, stat) ->
+        expect(grump.get).toHaveBeenCalledWith("hello")
+        done()
+
+    it "should error with EINVAL for existing files", (done) ->
+      @ret = fs.readlink "hello", (err, stat) ->
+        expect(err).toBeDefined()
+        expect(err.code).toBe("EINVAL")
+        expect(err.errno).toBe(-22)
+        expect(err.syscall).toBe("readlink")
+        done()
