@@ -25,7 +25,7 @@ tryStatic = (filename, cache_entry, options = {}) ->
       else
         resolve(result)
 
-resolveCacheEntry = (promise, cache_entry, filename, debug = false) ->
+resolveCacheEntry = (promise, cache_entry, filename, cache, debug = false) ->
   ok = (result) ->
     console.log chalk.gray("cache save for"), filename if debug
     cache_entry.at = new Date()
@@ -33,10 +33,8 @@ resolveCacheEntry = (promise, cache_entry, filename, debug = false) ->
     cache_entry.result = result
 
   fail = (error) ->
-    console.log chalk.red("cache save for " + "error"), filename if debug
-    cache_entry.at = new Date()
-    cache_entry.rejected = true
-    cache_entry.result = error
+    # remove the cache entry
+    cache.remove(filename)
 
     # attach a filename info the the error
     if not error._grump_filename
@@ -183,7 +181,7 @@ class Grump
       err.code = "ENOENT"
       Promise.reject(err)
 
-    return resolveCacheEntry(promise, cache_entry, filename, @debug)
+    return resolveCacheEntry(promise, cache_entry, filename, @cache, @debug)
 
   getSync: (filename) ->
     if not Sync.Fibers.current

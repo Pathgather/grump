@@ -8,9 +8,10 @@ module.exports = class GrumpCache extends events.EventEmitter
     @_cache = {}
   get: (key) -> @_cache[key]
   init: (key) -> @_cache[key] = {id: key, deps: {}, result: null, rejected: null}
+  remove: (key) -> delete @_cache[key]
 
   _expire: (key, entry) ->
-    delete @_cache[key]
+    @remove(key)
     @emit("expired", key, entry)
     return false
 

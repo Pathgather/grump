@@ -266,12 +266,12 @@ describe "Grump", ->
           expect(error).toEqual(jasmine.objectContaining(message: "my error"))
           done()
 
-    it "should cache the handler error", (done) ->
+    it "should not cache the handler error", (done) ->
       grump.get("hello_error").catch ->
         process.nextTick ->
           grump.get("hello_error")
             .catch ->
-              expect(handler.calls.count()).toBe(1)
+              expect(handler.calls.count()).toBe(2)
               done()
 
     it "should return same promise if a request is pending", ->
