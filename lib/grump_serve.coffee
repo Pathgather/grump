@@ -17,6 +17,10 @@ content_types = [
   [/\.css$/, "text/css"]
   [/\.html$/, "text/html"]
   [/\.js$/, "application/javascript"]
+  [/\.gif$/, "image/gif"]
+  [/\.jpg$/, "image/jpeg"]
+  [/\.png$/, "image/png"]
+  [/\.svg$/, "image/svg+xml"]
 ]
 
 guess_content_type = (url) ->

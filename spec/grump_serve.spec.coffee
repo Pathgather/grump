@@ -20,6 +20,7 @@ describe "Grump#serve", ->
         "app.js": -> "some javascript"
         "style.css": -> "styles"
         "index.html": -> "index"
+        "image.*": -> new Buffer("image data here!")
         "hello": -> new Buffer("binary data here!")
         "throws_error": -> throw new Error("big problem")
         "throws_in_sub": ({grump}) -> grump.get("throws_error")
@@ -81,6 +82,10 @@ describe "Grump#serve", ->
       "__debug": "application/json"
       "app.js": "application/javascript"
       "index.html": "text/html"
+      "image.gif": "image/gif"
+      "image.jpg": "image/jpeg"
+      "image.png": "image/png"
+      "image.svg": "image/svg+xml"
       "style.css": "text/css"
       "throws_error": "text/plain"
     }
