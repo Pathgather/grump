@@ -186,6 +186,9 @@ class GrumpFS
   lstat: =>
     @stat(arguments...)
 
+  lstatSync: =>
+    @statSync(arguments...)
+
 # a helper class that wraps node's fs and simply logs all calls
 GrumpFS.LoggingFS = Object.create(fs)
 
